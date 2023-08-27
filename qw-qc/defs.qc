@@ -42,11 +42,6 @@ entity          world;
 float           time;
 float           frametime;
 
-entity          newmis;                         // if this is set, the entity that just
-								// run created a new missile that should
-								// be simulated immediately
-
-
 float           force_retouch;          // force all entities to touch triggers
 								// next frame.  this is needed because
 								// non-moving things don't normally scan
@@ -56,6 +51,10 @@ float           force_retouch;          // force all entities to touch triggers
 								// decremented each frame, so set to 2
 								// to guarantee everything is touched
 string          mapname;
+
+float 			deathmatch;
+float 			coop;
+float 			teamplay;
 
 float           serverflags;            // propagated from level to level, used to
 								// keep track of completed episodes
@@ -131,7 +130,6 @@ void            end_sys_globals;                // flag for structure dumping
 .vector         absmin, absmax; // *** origin + mins / maxs
 
 .float          ltime;                  // local time for entity
-.float          lastruntime;    // *** to allow entities to run out of sequence
 
 .float          movetype;
 .float          solid;
@@ -141,6 +139,7 @@ void            end_sys_globals;                // flag for structure dumping
 .vector         velocity;
 .vector         angles;
 .vector         avelocity;
+.vector 		punchangle;
 
 .string         classname;              // spawn function
 .string         model;
@@ -187,6 +186,8 @@ void            end_sys_globals;                // flag for structure dumping
 
 .float          fixangle;
 .vector         v_angle;                // view / targeting angle for players
+
+.float 			idealpitch;
 
 .string         netname;
 
@@ -744,11 +745,6 @@ void() SUB_Remove;
 //
 //      combat.qc
 //
-void(entity targ, entity inflictor, entity attacker, float damage) T_Damage;
 
-
-float (entity e, float healamount, float ignore) T_Heal; // health function
-
-float(entity targ, entity inflictor) CanDamage;
 
 
