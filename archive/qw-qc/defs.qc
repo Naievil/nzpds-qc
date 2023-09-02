@@ -391,17 +391,44 @@ vector  VEC_HULL2_MIN = '-32 -32 -24';
 vector  VEC_HULL2_MAX = '32 32 64';
 
 // protocol bytes
-float   SVC_TEMPENTITY          = 23;
-float   SVC_KILLEDMONSTER       = 27;
-float   SVC_FOUNDSECRET         = 28;
-float   SVC_INTERMISSION        = 30;
-float   SVC_FINALE                      = 31;
-float   SVC_CDTRACK                     = 32;
-float   SVC_SELLSCREEN          = 33;
-float   SVC_SMALLKICK           = 34;
-float   SVC_BIGKICK                     = 35;
-float   SVC_MUZZLEFLASH         = 39;
-
+#define     SVC_BAD                     0
+#define     SVC_NOP                     1
+#define     SVC_DISCONNECT              2
+#define     SVC_UPDATESTAT              3
+#define     SVC_VERSION                 4
+#define     SVC_SETVIEW                 5
+#define     SVC_SOUND                   6
+#define     SVC_TIME                    7
+#define     SVC_PRINT                   8
+#define     SVC_STUFFTEXT               9
+#define     SVC_SETANGLE                10
+#define     SVC_SERVERINFO              11
+#define     SVC_LIGHTSTYLE              12
+#define     SVC_UPDATENAME              13
+#define     SVC_UPDATEPOINTS            14
+#define     SVC_CLIENTDATA              15
+#define     SVC_STOPSOUND               16
+#define     SVC_PARTICLE                18
+#define     SVC_DAMAGE                  19
+#define     SVC_SPAWNSTATIC             20
+#define     SVC_SPAWNBINARY             21
+#define     SVC_SPAWNBASELINE           22
+#define     SVC_TEMPENTITY              23
+#define     SVC_SETPAUSE                24
+#define     SVC_SIGNONNUM               25
+#define     SVC_CENTERPRINT             26
+#define     SVC_SPAWNSTATICSOUND        29              // 1998-08-08 Complete SVC list by Zhenga
+#define     SVC_INTERMISSION            30
+#define     SVC_FINALE                  31
+#define     SVC_CDTRACK                 32
+#define     SVC_SELLSCREEN              33
+#define     SVC_CUTSCENE               	34              // 1998-08-08 Complete SVC list by Zhenga
+#define     SVC_WEAPONFIRE              35
+#define		SVC_HITMARK					36
+#define     SVC_USEPRINT                38
+#define 	SVC_LIMBUPDATE  			51 				// naievil -- keep me
+#define 	SVC_BSPDECAL    			50				// naievil -- keep me
+#define 	SVC_ACHIEVEMENT 			52
 
 float   TE_SPIKE                = 0;
 float   TE_SUPERSPIKE   = 1;
