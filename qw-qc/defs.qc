@@ -59,11 +59,8 @@ float 			teamplay;
 float           serverflags;            // propagated from level to level, used to
 								// keep track of completed episodes
 
-float           total_secrets;
-float           total_monsters;
-
-float           found_secrets;          // number of secrets found
-float           killed_monsters;        // number of monsters killed
+float           rounds;
+float           rounds_change;
 
 
 // spawnparms are used to encode information about clients across server
@@ -94,6 +91,7 @@ entity          msg_entity;                             // destination of single
 void()          main;                                           // only for testing
 
 void()          StartFrame;
+void() 			EndFrame;
 
 void()          PlayerPreThink;
 void()          PlayerPostThink;
@@ -109,6 +107,10 @@ void()          SetNewParms;                    // called when a client first co
 
 void()          SetChangeParms;                 // call to set parms for self so they can
 									// be saved for a level transition
+
+void() 			ParseClientCommand;
+string          CMD_STRING;
+void() 			Soft_Restart;
 
 
 //================================================
