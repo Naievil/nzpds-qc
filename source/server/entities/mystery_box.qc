@@ -988,6 +988,7 @@ void() MBOX_LoadData =
 
 void() mystery_box =
 {
+#if 0
     // Load and cache all of the allowed weapons into the hunk.
     MBOX_LoadData();
 
@@ -1049,4 +1050,5 @@ void() mystery_box =
 
 	self.think = MBOX_AllocateTempEntities;
 	self.nextthink = time + 0.2;
+#endif
 };
