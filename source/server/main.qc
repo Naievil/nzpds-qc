@@ -43,7 +43,108 @@ float ai_delay_time;
 float zombie_cleaned_w;
 void() StartFrame =
 {
+	framecount = framecount + 1;
 
+	if (waypoint_mode) {
+		if (!zombie_cleaned_w) {
+			entity zent;
+			zent = find (world, classname, "ai_zombie");
+			while (zent)
+			{
+				/*
+				if (zent.head)
+					remove (zent.head);
+				if (zent.larm)
+					remove (zent.larm);
+				if (zent.rarm)
+					remove (zent.rarm);
+				*/
+				remove (zent);
+				zent = find (zent, classname, "ai_zombie");
+			}
+			zombie_cleaned_w = true;
+
+			zent = find (world, classname, "waypoint");
+			while (zent)
+			{
+				if (zent.targetname)
+					setmodel(zent, "models/way/normal_way_door.spr");
+				else
+					setmodel(zent, "models/way/normal_way.spr");
+				zent = find (zent, classname, "waypoint");
+			}
+			zent = find (world, classname, "door_nzp_cost");
+			while (zent)
+			{
+				zent.solid = SOLID_NOT;
+				zent.touch = SUB_Null;
+				zent = find (zent, classname, "door_nzp_cost");
+			}
+			zent = find (world, classname, "door_nzp");
+			while (zent)
+			{
+				zent.solid = SOLID_NOT;
+				zent.touch = SUB_Null;
+				zent.solid = SOLID_NOT;
+				zent = find (zent, classname, "door_nzp");
+			}
+			zent = find (world, classname, "window");
+			while (zent)
+			{
+				zent.solid = SOLID_NOT;
+				zent.touch = SUB_Null;
+				zent = find (zent, classname, "window");
+			}
+		}
+		return;
+	}
+
+
+	if (roundinit) {
+		Round_Core();
+
+		if (ai_delay_time < time) {
+			Do_Zombie_AI ();
+
+			// This determines the delay between each AI's update sequence.
+			// It needs to be variable -- the more AI, the smaller this number
+			// should end up being, or else you'll have AI completely stall
+			// waiting for it's chance in the spotlight.
+			// -----
+
+#ifdef FTE
+
+			// On FTE, resources are available to make this super short (0.01s,
+			// meaning all 24 ai update 4 times a second).
+			ai_delay_time = time + 0.01;
+
+#else
+
+			// On other platforms, have this be 0.03 / ai factor / 12.
+			// This means that:
+			// AI Updates at ~30Hz with 12 Zombies
+			// AI Updates at ~45Hz with 18 Zombies
+			// AI Updates at ~60Hz with 24 Zombies
+			ai_delay_time = time + (0.03 / (6/12));
+
+#endif // FTE
+
+		}
+	} else {
+		entity SpawnedIn;
+		SpawnedIn = find(world, classname, "player");
+
+		if (SpawnedIn) {
+			entity getdog = find(world, classname, "spawn_dog");
+			if (getdog)
+				gotdog = 1;
+			else
+				gotdog = 0;
+
+			updateDogRound();
+			InitRounds();
+		}
+	}
 }
 string(string s) precache_model         = #20;
 
