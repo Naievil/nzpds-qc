@@ -1682,7 +1682,7 @@ void(entity where) spawn_a_zombieB =
 #endif // FTE
 
 	szombie.movetype = MOVETYPE_WALK;
-	setmodel(szombie, "models/ai/zb%.mdl");
+	setmodel(szombie, "models/ai/zfull.mdl");
 	szombie.hop_step = 0;
 	szombie.gravity = 1.0;
 	
