@@ -26,6 +26,17 @@
 */
 string(string asset) convert_old_asset_path;
 
+void() NotifyGameEnd =
+{
+#ifdef FTE
+
+	WriteByte(MSG_MULTICAST, SVC_CGAMEPACKET);
+	WriteByte(MSG_MULTICAST, EVENT_ENDGAME);
+	multicast('0 0 0', MULTICAST_ALL);
+
+#endif // FTE
+}
+
 void SetUpdate(entity client, float type, float val1, float val2, float val3)
 {
 #ifdef FTE
@@ -264,35 +275,6 @@ void(float broadcast_time, float type, string str) BroadcastMessage =
 #endif // FTE
 }
 
-void(float playernum, float points, float am, float kills, string name, entity person) UpdatePlayerPoints =
-{
-#ifdef FTE
-
-	if (player_count == 0) {
-		WriteByte(MSG_MULTICAST, SVC_CGAMEPACKET);
-		WriteByte(MSG_MULTICAST, EVENT_POINTUPDATE);
-		WriteByte(MSG_MULTICAST, playernum);
-		WriteLong(MSG_MULTICAST, points);
-		WriteLong(MSG_MULTICAST, am);
-		WriteLong(MSG_MULTICAST, kills);
-		WriteString(MSG_MULTICAST, name);
-		msg_entity = person;
-		multicast('0 0 0', MULTICAST_ONE);
-	}
-	else {
-		WriteByte(MSG_MULTICAST, SVC_CGAMEPACKET);
-		WriteByte(MSG_MULTICAST, EVENT_POINTUPDATE);
-		WriteByte(MSG_MULTICAST, playernum);
-		WriteLong(MSG_MULTICAST, points);
-		WriteLong(MSG_MULTICAST, am);
-		WriteLong(MSG_MULTICAST, kills);
-		WriteString(MSG_MULTICAST, name);
-		multicast('0 0 0', MULTICAST_ALL);
-	}
-
-#endif // FTE
-}
-
 void(float count) UpdatePlayerCount = {
 #ifdef FTE
 	if (count == 0)
@@ -320,6 +302,30 @@ void(float newtime, float newtype, entity change) PromptLevelChange =
 
 #endif // FTE
 }
+
+#ifdef FTE
+void(entity who) grenade_pulse =
+{
+
+	WriteByte(MSG_MULTICAST, SVC_CGAMEPACKET);
+	WriteByte(MSG_MULTICAST, EVENT_GRENADEPULSE);
+	msg_entity = who;
+	multicast('0 0 0', MULTICAST_ONE);
+
+}
+#endif // FTE
+
+#ifdef FTE
+
+void(entity who) nzp_bettyprompt =
+{
+	WriteByte(MSG_MULTICAST, SVC_CGAMEPACKET);
+	WriteByte(MSG_MULTICAST, EVENT_BETTYPROMPT);
+	msg_entity = who;
+	multicast('0 0 0', MULTICAST_ONE);
+}
+
+#endif // FTE
 
 void(entity who) UpdatePunchangle =
 {
@@ -510,6 +516,48 @@ void (float achievement_id, optional entity who) GiveAchievement =
 	}
 }
 
+#ifdef FTE
+
+void CSQC_SendChatMessage(float player_id, string message) {
+	WriteByte(MSG_MULTICAST, SVC_CGAMEPACKET);
+	WriteByte(MSG_MULTICAST, EVENT_CHATMESSAGE);
+	WriteByte(MSG_MULTICAST, num_for_edict(self) - 1);
+	WriteByte(MSG_MULTICAST, player_id);
+	WriteString(MSG_MULTICAST, message);
+	multicast('0 0 0', MULTICAST_ALL);
+}
+
+/*
+=================
+Player_SendEntity
+
+    Networks the player info
+=================
+*/
+float Player_SendEntity( entity ePVEnt, float flChanged ) {
+    WriteByte( MSG_ENTITY, 1 );
+    WriteCoord( MSG_ENTITY, self.origin_x ); // Position X
+    WriteCoord( MSG_ENTITY, self.origin_y ); // Position Y
+    WriteCoord( MSG_ENTITY, self.origin_z ); // Position Z
+    WriteAngle( MSG_ENTITY, self.angles_x ); // Angle X
+    WriteAngle( MSG_ENTITY, self.angles_y ); // Angle Y
+    WriteAngle( MSG_ENTITY, self.angles_z ); // Angle Z
+    WriteShort( MSG_ENTITY, self.velocity_x ); // Velocity X
+    WriteShort( MSG_ENTITY, self.velocity_y ); // Velocity X
+    WriteShort( MSG_ENTITY, self.velocity_z ); // Velocity X
+	WriteByte( MSG_ENTITY, self.playernum ); // Player ID
+	WriteShort( MSG_ENTITY, self.modelindex ); // Player Model
+	WriteByte( MSG_ENTITY, self.frame ); // Player's Frame
+	WriteShort( MSG_ENTITY, self.movetype ); // Player Movetype
+    WriteShort( MSG_ENTITY, self.flags ); // Flags, important for physics
+	WriteByte( MSG_ENTITY, self.stance ); // Player Stance
+	WriteFloat( MSG_ENTITY, self.points ); // Player Score
+	WriteShort( MSG_ENTITY, self.kills ); // Player Kills
+    return TRUE;
+}
+
+#endif // FTE
+
 void (float achievement_id, float progress_value, optional entity who) UpdateAchievementProgress =
 {
 
@@ -564,6 +612,41 @@ void (float achievement_id, float progress_value, optional entity who) UpdateAch
 
 }
 
+#ifdef FTE
+
+void(entity who, float version) nzp_setdoubletapver =
+{
+	WriteByte(MSG_MULTICAST, SVC_CGAMEPACKET);
+	WriteByte(MSG_MULTICAST, EVENT_DOUBLETAPUPDATE);
+	WriteByte(MSG_MULTICAST, version);
+	msg_entity = who;
+	multicast('0 0 0', MULTICAST_ONE);
+};
+
+#endif // FTE
+
+void(vector org) Effect_Fire =
+{
+
+#ifndef FTE
+
+	particle (self.origin, v_up*8, 111, 0);
+
+#else
+
+	WriteByte(MSG_MULTICAST, SVC_CGAMEPACKET);
+	WriteByte(MSG_MULTICAST, EVENT_FLAME);
+	WriteCoord(MSG_MULTICAST, org_x);
+	WriteCoord(MSG_MULTICAST, org_y);
+	WriteCoord(MSG_MULTICAST, org_z);
+	multicast('0 0 0', MULTICAST_ALL);
+
+	//te_flamejet(self.origin, v_up*8, 10);
+
+#endif // FTE
+
+};
+
 // *****************************************
 // Unrelated to engine, but custom functions
 // *****************************************
@@ -595,31 +678,6 @@ float() crandom =
 	return 2*(random() - 0.5);
 }
 
-void WeaponSwitch(entity player) {
-	float wep, cmag, cmag2, cammo;
-
-	wep = other.weapon;
-	other.weapon = other.secondaryweapon;
-	other.secondaryweapon = wep;
-
-	cmag = other.currentmag;
-	other.currentmag = other.secondarymag;
-	other.secondarymag = cmag;
-
-	cmag2 = other.currentmag2;
-	other.currentmag2 = other.secondarymag2;
-	other.secondarymag2 = cmag2;
-
-	cammo = other.currentammo;
-	other.currentammo = other.secondaryammo;
-	other.secondaryammo = cammo;
-
-	entity tempe = self;
-	self = player;
-	SwitchWeapon(other.weapon);
-	self = tempe;
-}
-
 void(entity person, float expamt, float doublepoint) addmoney =
 {
 	if (person.classname != "player" || person.downed)
@@ -635,6 +693,31 @@ void(entity person, float expamt, float doublepoint) addmoney =
 		total_powerup_points += expamt;
 
 	person.points += expamt;
+};
 
-	UpdatePlayerPoints(person.playernum, person.points, expamt, person.kills, person.netname, person);
+float(entity them, entity me) PlayerIsLooking =
+{
+	float ret = false;
+	float old_solid = me.solid;
+	me.solid = SOLID_BBOX;
+	setorigin(me, me.origin);
+
+	vector source;
+	makevectors (them.v_angle);
+	source = them.origin + them.view_ofs;
+
+	// Standard 'are we facing' test..
+	traceline(source, source + v_forward*50, 0, them);
+
+	// We're inside of an object.. is it the target?
+	if (trace_startsolid) {
+		if (v_forward*normalize(me.origin - them.origin) > 0.7)
+			ret = true;
+	} else if (trace_ent == me) {
+		ret = true;
+	}
+
+	me.solid = old_solid;
+	setorigin(me, me.origin);
+	return ret;
 };

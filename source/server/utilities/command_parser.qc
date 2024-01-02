@@ -27,6 +27,8 @@
 
 */
 
+void(vector where, float type) Spawn_Powerup;
+
 // Whether the command prohibits client-sending.
 float client_parse_override;
 
@@ -41,7 +43,7 @@ float client_parse_override;
 float(string params) Command_give =
 {
 	// Anti-Cheat in Co-Op.
-	if (coop && cheats_have_been_activated == false) {
+	if (player_count && cheats_have_been_activated == false) {
 		bprint(PRINT_HIGH, "Someone tried to issue Give in a Co-Op match. Nice try!\n");
 		return COMMAND_FAILURE;
 	}
@@ -49,27 +51,7 @@ float(string params) Command_give =
 	float wep = stof(argv(1));
 
 	if (wep) {
-		self.weapon = wep;
-		self.currentammo = getWeaponAmmo(wep);
-		self.currentmag = getWeaponMag(wep);
-		if (IsDualWeapon(wep)) {
-			self.currentmag2 = self.currentmag;
-		}
-
-		if (GetFrame(self.weapon, FIRST_TAKE_START) != 0)
-			Weapon_PlayViewModelAnimation(ANIM_FIRST_TAKE, SUB_Null, 0);
-		else
-			Weapon_PlayViewModelAnimation(ANIM_TAKE_OUT, SUB_Null, 0);
-
-		self.reload_delay2 = self.fire_delay2 = self.reload_delay = self.fire_delay = 0;
-
-#ifndef FTE
-
-		self.Weapon_Name = GetWeaponName(self.weapon);
-
-#endif // FTE
-
-		SwitchWeapon(self.weapon);
+		Weapon_GiveWeapon(wep, 0, 0);
 
         return COMMAND_SUCCESS;
     }
@@ -86,7 +68,7 @@ float(string params) Command_give =
 float(string params) Command_addmoney =
 {
 	// Anti-Cheat in Co-Op.
-	if (coop && cheats_have_been_activated == false) {
+	if (player_count && cheats_have_been_activated == false) {
 		bprint(PRINT_HIGH, "Someone tried to issue Add Money in a Co-Op match. Nice try!\n");
 		return COMMAND_FAILURE;
 	}
@@ -126,7 +108,7 @@ float(string params) Command_softrestart =
 float(string params) Command_godmode =
 {
 	// Anti-Cheat in Co-Op.
-	if (coop && cheats_have_been_activated == false) {
+	if (player_count && cheats_have_been_activated == false) {
 		bprint(PRINT_HIGH, "Someone tried to issue God Mode in a Co-Op match. Nice try!\n");
 		return COMMAND_FAILURE;
 	}
@@ -142,14 +124,43 @@ float(string params) Command_godmode =
 float(string params) Command_noclip =
 {
 	// Anti-Cheat in Co-Op.
-	if (coop && cheats_have_been_activated == false) {
+	if (player_count && cheats_have_been_activated == false) {
 		bprint(PRINT_HIGH, "Someone tried to issue No-Clip in a Co-Op match. Nice try!\n");
 		return COMMAND_FAILURE;
+	}
+
+	if (self.model == "") {
+		setmodel(self, "models/player.mdl");
+		setsize(self, VEC_HULL_MIN, VEC_HULL_MAX);
+	} else {
+		setmodel(self, "");
 	}
 
 	client_parse_override = false;
 	return COMMAND_SUCCESS;
 } 
+
+//
+// Command_powerup()
+// Spawns a Power-Up of a given ID in front of you.
+//
+float(string params) Command_powerup =
+{
+	// Anti-Cheat in Co-Op.
+	if (player_count && cheats_have_been_activated == false) {
+		bprint(PRINT_HIGH, "Someone tried to issue spawn_pu in a Co-Op match. Nice try!\n");
+		return COMMAND_FAILURE;
+	}
+
+	// Grab parameters.
+    tokenize(params);
+	float value = stof(argv(0));
+
+	makevectors(self.angles);
+	Spawn_Powerup(self.origin + v_forward * 50, value);
+
+	return COMMAND_SUCCESS;
+};
 
 //
 // Command_tracedmgmultiplier()
@@ -158,7 +169,7 @@ float(string params) Command_noclip =
 float(string params) Command_tracedmgmultiplier =
 {
 	// Anti-Cheat in Co-Op.
-	if (coop && cheats_have_been_activated == false) {
+	if (player_count && cheats_have_been_activated == false) {
 		bprint(PRINT_HIGH, "Someone tried to issue sv_tracedmgmultiplier in a Co-Op match. Nice try!\n");
 		return COMMAND_FAILURE;
 	}
@@ -173,6 +184,26 @@ float(string params) Command_tracedmgmultiplier =
 	}
 
 	global_trace_damage_multiplier = value;
+	return COMMAND_SUCCESS;
+}
+
+//
+// Command_say()
+// Sends message via CSQC to other clients (FTE-only)
+//
+float(string params) Command_say =
+{	
+	// Grab parameters.
+    tokenize(params);
+	string value = argv(0);
+
+#ifdef FTE
+
+	CSQC_SendChatMessage(self.playernum, params);
+
+#endif // FTE
+
+	client_parse_override = false;
 	return COMMAND_SUCCESS;
 }
 
@@ -196,15 +227,32 @@ var struct {
 	{"qc_soft_restart", Command_softrestart, false, "Executes the Soft_Restart QuakeC function. Useful for debugging its functionality.\n"},
 	{"god", Command_godmode, false, "Toggles God Mode.\n"},
 	{"noclip", Command_noclip, false, "Toggles No Clip.\n"},
-	{"sv_tracedmgmultiplier", Command_tracedmgmultiplier, true, "Multiplies damage output with weapons that fire Traces.\n"}
+	{"sv_tracedmgmultiplier", Command_tracedmgmultiplier, true, "Multiplies damage output with weapons that fire Traces.\n"},
+	{"spawn_pu", Command_powerup, true, "Usage: spawn_pu <powerup>\n  Spawns a Power-Up of a given ID in front of you. -1 for random.\n"},
+	{"say", Command_say, true, "Usage: say <message>\n  Sends a chat message to CSQC for other clients.\n"}
 };
+
+//
+// SV_IsCommand(command_string)
+// Takes a single string and references if it is a
+// registered command, returns true if it is. Useful
+// for cl_chatmode interferring with custom commands.
+//
+float(string command_string) SV_IsCommand =
+{
+	for (float i = 0; i < server_commands.length; i++) {
+		if (command_string == server_commands[i].command_name)
+			return true;
+	}
+
+	return false;
+}
 
 //
 // SV_ParseClientCommand(command_string)
 // Server-Side client command parser to add special
 // gameplay commands that interact with QuakeC.
 //
-
 void(string command_string) SV_ParseClientCommand =
 {
 	// If true, we will avoid sending the command info
@@ -220,10 +268,10 @@ void(string command_string) SV_ParseClientCommand =
 	// Check for 'say' prefix (`cl_chatmode 2` will append it
 	// to everything unregistered by the client). Re-tokenize
 	// if found.
-	if (command == "say") {
+	if (command == "say" && SV_IsCommand(argv(1))) {
 		string fixed_command_string = argv(1);
 		tokenize(fixed_command_string);
-		command = argv(0);
+		command = argv(0);	
 	}
 
     // Now iterate over our commands

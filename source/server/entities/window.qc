@@ -1,9 +1,9 @@
 /*
 	server/entities/window.qc
 
-	barricades
+	Barricades
 
-	Copyright (C) 2021 NZ:P Team
+	Copyright (C) 2021-2023 NZ:P Team
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -27,6 +27,8 @@
 
 .float rebuild_time;
 
+#define BARRICADE_SPAWNFLAG_NOTREAL 	1
+
 void() spawn_boxes =
 {
 	makevectors(self.angles);
@@ -46,9 +48,9 @@ void() screen_shake =
 	r = crandom();
 	s = random();
   if (self.enemy.zoom == 2 || self.enemy.zoom == 1)
-    zoom_factor = 0.5;
+    zoom_factor = 0.25;
   else
-    zoom_factor = 1;
+    zoom_factor = 0.5;
 
 	self.enemy.punchangle_y = r * 4 * zoom_factor;
     self.enemy.punchangle_x = (4 + (s * 2)) * zoom_factor;
@@ -235,12 +237,12 @@ void()	window_carpenter_8	=[	8,		window_carpenter_9 	]	{self.frame = 72;};
 void()	window_carpenter_9	=[	7,		window_carpenter_10 ]		{self.frame = 79;sound(self, 1, self.oldmodel, 1, ATTN_NORM);};
 void()	window_carpenter_10	=[	8,		window_carpenter_11	]	{self.frame = 80;};
 void()	window_carpenter_11	=[	7,		window_carpenter_12 ]		{self.frame = 87;sound(self, 2, self.oldmodel, 1, ATTN_NORM);};
-void()	window_carpenter_12	=[	8,		SUB_Null		 	]	{self.frame = 88;};
+void()	window_carpenter_12	=[	8,		SUB_Null		 	]	{self.frame = 88;self.isspec = 0;};
 
 
 void() Window_Damage =
 {
-	if(self.health == 0)
+	if(self.health == 0 || self.owner)
 		return;
 
 	sound(self, CHAN_VOICE, self.aistatus, 1, ATTN_NORM);
@@ -315,9 +317,13 @@ void() Rebuild_Anims =
 };
 void() window_touch =
 {
+	if (self.owner)
+		return;
+	
 	if(other.classname == "player" && !other.downed && self.health != -10)
 	{
-		if(self.health < 6)
+		// cypress (09 dec 2023) -- support for limited barricade health.
+		if(self.health < self.health_delay)
 		{
 			useprint (other, 5, 0, 0);
 			
@@ -336,17 +342,73 @@ void() window_touch =
 	}
 };
 
+//
+// Barricade_GetFrameForHealth(barricade_health)
+// What it says on the tin -- if we're spawning with only
+// one board, make sure we're on the frame with only one board,
+// two for two, etc.
+//
+float(float barricade_health) Barricade_GetFrameForHealth =
+{
+	switch(barricade_health) {
+		case -1:
+			return 41;
+		case 1:
+			return 34;
+		case 2:
+			return 27;
+		case 3:
+			return 20;
+		case 4:
+			return 13;
+		case 5:
+			return 6;
+		case 6:
+			return 0;
+		default:
+			return 41;
+	}
+
+	return 0;
+}
+
 void() item_barricade =
 {
-	if (self.spawnflags & 1) {
+	if (self.spawnflags & BARRICADE_SPAWNFLAG_NOTREAL) {
 		self.health = -10; // Window is deactivated, to only hop over it
 	} else {
+		//
+		// Set Default Stats for Compatibility
+		//
+
+		// Model
 		if (!self.model)
 			self.model = "models/misc/window.mdl";
+
+		// Repair Sound
 		if (!self.oldmodel)
 			self.oldmodel = "sounds/misc/barricade.wav";
+
+		// Destroy Sound
 		if (!self.aistatus)
 			self.aistatus = "sounds/misc/barricade_destroy.wav";
+
+		// Starting Health (-1 = start none, needs to be this way for compatibility)
+		if (!self.health || self.health > 6 || self.health < -1)
+			self.health = 6;
+
+		// Max Health
+		if (!self.health_delay || self.health_delay > 6)
+			self.health_delay = 6;
+
+		// Restore health state if using compatibility hack
+		if (self.health == -1) self.health = 0;
+		if (self.health_delay == -1) self.health_delay = 0;
+
+		// cypress -- i was going to add a check if the start health was greater
+		// than max here, but i figured someone might want to make a weird ass
+		// challenge map where barricades become irreperable after destruction..
+		// .. not a bad idea, actually.
 
 		precache_model(self.model);
 		precache_sound(self.oldmodel);
@@ -358,7 +420,7 @@ void() item_barricade =
 	self.solid = SOLID_TRIGGER;
 
 	if (self.health != -10) {
-		self.health = 6;
+		self.frame = Barricade_GetFrameForHealth(self.health);
 		setmodel(self, self.model);
 	}
 

@@ -24,7 +24,7 @@
 		Boston, MA  02111-1307, USA
 
 */
-
+void() SUB_UseTargets;
 float() spawn_a_dogA;
 void() zapper_cooldown;
 
@@ -95,19 +95,20 @@ float() getZombieTotal = {
 	return 0;
 }
 
-void(string s) playSoundAtPlayers =
+//
+// Rounds_PlayTransition(sound_path)
+// A nice wrapper for sound() that checks if
+// music is playing and proceeds if not.
+//
+void(string sound_path) Rounds_PlayTransition =
 {
 	// Don't play any round stuff while there's a song egg happening.
 	if (music_override > time)
 		return;
 
-	local entity p;
-	p = find(world,classname,"player");
-	while(p)
-	{
-		sound(p,CHAN_AUTO,s,1,ATTN_NONE);
-		p = find(p,classname,"player");
-	}
+	// Pick a random player because it needs a source.
+	entity some_player = find(world, classname, "player");
+	sound(some_player, CHAN_AUTO, sound_path, 1, ATTN_NONE);
 }
 
 void() updateDogRound =
@@ -141,12 +142,12 @@ void() EndRound =
 	rounds_change = 4;
 	SetUpdate(self, UT_ROUNDS_CHANGE, rounds_change, 0, 0);
 	if (gotdog && rounds == dogRound) {
-		playSoundAtPlayers("sounds/rounds/droundend.wav");
+		Rounds_PlayTransition("sounds/rounds/droundend.wav");
 		dogWave = false;
 	} else {
-		playSoundAtPlayers("sounds/rounds/eround.wav");
+		Rounds_PlayTransition("sounds/rounds/eround.wav");
 	}
-	round_changetime = time + 5;
+	round_changetime = time + 10;
 
 	// No Perks? No Problem & Abstinence Program
 	if (rounds >= 10) {
@@ -163,6 +164,18 @@ void() EndRound =
 			players.ach_tracker_npnp = 0;
 			players = find(players, classname, "player");
 		}
+	}
+
+	// Fire off all trigger_atroundent ents
+	entity triggers = find(world, classname, "trigger_atroundend");
+	while(triggers != world) {
+		if (triggers.health == rounds) {
+			entity oldself = self;
+			self = triggers;
+			SUB_UseTargets();
+			self = oldself;
+		}
+		triggers = find(triggers, classname, "trigger_atroundend");
 	}
 }
 
@@ -181,10 +194,11 @@ void() NewRound =
 	if (rounds != 0)
 	{
 		if (gotdog && rounds == (dogRound - 1)) {
-			playSoundAtPlayers("sounds/rounds/droundstart.wav");
+			Rounds_PlayTransition("sounds/rounds/droundstart.wav");
 			dogWave = true;
+			dog_round_count++;
 		} else {
-			playSoundAtPlayers("sounds/rounds/nround.wav");
+			Rounds_PlayTransition("sounds/rounds/nround.wav");
 		}
 		rounds_change = 6;
 		SetUpdate(self, UT_ROUNDS_CHANGE, rounds_change, 0, 0);
@@ -241,6 +255,8 @@ void() NewRound =
 
 		if (world.fog) {
 			localcmd(strcat("fog ", world.fog));
+		} else {
+			localcmd("fog 0 0 0 0 0\n");
 		}
 	}
 
@@ -320,7 +336,7 @@ void() Round_Core =
 	}
 
 	if (Remaining_Zombies < 1 && !Delay_Time) {
-		Delay_Time = time + 2;
+		Delay_Time = time + 1;
 		rounds_change = 3;
 	} else if (Delay_Time && Delay_Time < time) {
 		Delay_Time = 0;
@@ -337,7 +353,12 @@ void() InitRounds =
 	totalpowerups = 0;
 	powerup_activate = 2000;
 	powerup_score_threshold = ((player_count + 1) * G_STARTPOINTS) + powerup_activate;
-	spawnAllZombEnts();
+
+	// cypress -- fix Soft_Restart spawning multiple 
+	// pairs of zombie spawn points.
+	if (!roundinit)
+		spawnAllZombEnts();
+	
 	round_changetime = time + 3.5;
 	rounds_change = 1;
 	roundinit = 1;

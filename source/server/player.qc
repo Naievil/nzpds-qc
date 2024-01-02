@@ -28,101 +28,202 @@
 */
 
 void(entity e) Light_None;
+void() Spawns_Init;
+void() SUB_UseTargets;
+void() rec_downed;
 
 #define PLAYER_START_HEALTH		100
+
+#define PLAYER_CROUCH_HEIGHT 	25
+#define PLAYER_PRONE_HEIGHT 	23
+
+#define PLAYER_ANIM_WALK 		1
+#define PLAYER_ANIM_SPRINT		2
 
 //
 // Player 3rd Person Animations
 //
 
-// Enter Last Stand
-void() PAnim_GetDown1	=[	1, 		PAnim_GetDown2	]	{self.frame = 32;};
-void() PAnim_GetDown2	=[	1, 		PAnim_GetDown3	]	{self.frame = 33;};
-void() PAnim_GetDown3	=[	1, 		PAnim_GetDown4	]	{self.frame = 34;};
-void() PAnim_GetDown4	=[	1, 		PAnim_GetDown5	]	{self.frame = 35;};
-void() PAnim_GetDown5	=[	1, 		PAnim_GetDown6	]	{self.frame = 36;};
-void() PAnim_GetDown6	=[	1, 		PAnim_GetDown6	]	{self.frame = 37;};
+// Walking
+void() PAnim_Walk		=[   1,     PAnim_Walk1			] {self.frame = 0; self.tp_anim_time = time + 0.5;}
+void() PAnim_Walk1		=[   2,     PAnim_Walk2			] {self.frame = 1;}
+void() PAnim_Walk2		=[   3,     PAnim_Walk3			] {self.frame = 2;}
+void() PAnim_Walk3		=[   4,     PAnim_Walk4			] {self.frame = 3;}
+void() PAnim_Walk4		=[   5,     PAnim_Walk5			] {self.frame = 4;}
+void() PAnim_Walk5		=[   6,     PAnim_Walk6			] {self.frame = 5;}
+void() PAnim_Walk6		=[   7,     PAnim_Walk7			] {self.frame = 6;}
+void() PAnim_Walk7		=[   8,     PAnim_Walk8			] {self.frame = 7;}
+void() PAnim_Walk8		=[   9,     SUB_Null			] {self.frame = 8;}
 
-//
-void() playreload   	=[	1,		playreload1	  	] {self.frame = 11;}
-void() playreload1  	=[	2,		playreload2	  	] {self.frame = 12;}
-void() playreload2  	=[	3,		playreload3	  	] {self.frame = 13;}
-void() playreload3  	=[	4,		playreload4	  	] {self.frame = 14;}
-void() playreload4  	=[	5,		playreload5	  	] {self.frame = 15;}
-void() playreload5  	=[	6,		playreload6	  	] {self.frame = 16;}
-void() playreload6  	=[	7,		playreload7	  	] {self.frame = 17;}
-void() playreload7  	=[	8,		playreload8	 	] {self.frame = 18;}
-void() playreload8  	=[	9,		playreload9 	] {self.frame = 19;}
-void() playreload9   	=[	10,		playreload10	] {self.frame = 20;}
-void() playreload10 	=[	11,		playreload11	] {self.frame = 21;}
-void() playreload11 	=[	12,		playreload12	] {self.frame = 22;}
-void() playreload12 	=[	13,		playreload13	] {self.frame = 23;}
-void() playreload13 	=[	14,		playreload13	] {self.frame = 24;}
-//
-void() playdownfire 	=[	1,		playdownfire1	] {self.frame = 38;}
-void() playdownfire1  	=[	2,		playdownfire1	] {self.frame = 39;} 
-//
-void() playaim 	 		=[	1,		playaim1		] {self.frame = 8;} // naievil -- player aimin anim
-void() playaim1 		=[	2,		playaim1		] {self.frame = 9;} // naievil -- second player aimin anim
-//
-void() playout 	  		=[	1,		playout1		] {self.frame = 10;} // naievil -- player aim out anim
-void() playout1 		=[	2,		playout1		] {self.frame = 11;} // naievil -- second player aim out anim
-//
-void() playrun1 		=[	1,		playrun2		] {self.frame = 25;}
-void() playrun2 		=[	2,		playrun3		] {self.frame = 26;}
-void() playrun3		 	=[	3,		playrun4		] {self.frame = 27;}
-void() playrun4 		=[	4,		playrun5		] {self.frame = 28;}
-void() playrun5 		=[	5,		playrun6		] {self.frame = 29;}
-void() playrun6 		=[	6,		playrun7		] {self.frame = 30;}
-void() playrun7 		=[	7,		playrun8		] {self.frame = 31;}
-void() playrun8 		=[	8,		playrun9		] {self.frame = 25;}
-void() playrun9 		=[	9,		playrun10		] {self.frame = 26;}
-void() playrun10 		=[	10,		playrun11		] {self.frame = 27;}
-void() playrun11 		=[	11,		playrun12		] {self.frame = 28;}
-void() playrun12 		=[	12,		playrun13		] {self.frame = 29;}
-void() playrun13 		=[	13,		playrun14		] {self.frame = 30;}
-void() playrun14 		=[	14,		playrun15		] {self.frame = 25;}
-void() playrun15 		=[	15,		playrun16		] {self.frame = 26;}
-void() playrun16 		=[	16,		playrun17		] {self.frame = 27;}
-void() playrun17 		=[	17,		playrun18		] {self.frame = 28;}
-void() playrun18 		=[	18,		playrun19		] {self.frame = 29;}
-void() playrun19 		=[	19,		playrun20		] {self.frame = 30;}
-void() playrun20 		=[	20,		playrun21		] {self.frame = 31;}
-void() playrun21 		=[	21,		playrun22		] {self.frame = 25;}
-void() playrun22 		=[	22,		playrun23		] {self.frame = 26;}
-void() playrun23 		=[	23,		playrun24 		] {self.frame = 27;}
-void() playrun24 		=[	24,		playrun25		] {self.frame = 28;}
-void() playrun25 		=[	25,		playrun26		] {self.frame = 29;}
-void() playrun26 		=[	26,		playrun27		] {self.frame = 30;}
-void() playrun27 		=[	27,		playrun28		] {self.frame = 25;}
-void() playrun28 		=[	28,		playrun29		] {self.frame = 26;}
-void() playrun29 		=[	29,		playrun30		] {self.frame = 27;}
-void() playrun30 		=[	30,		playrun31		] {self.frame = 28;}
-void() playrun31 		=[	31,		playrun32		] {self.frame = 29;}
-void() playrun32 		=[	32,		playrun33		] {self.frame = 30;}
-void() playrun33 		=[	33,		playrun33		] {self.frame = 31;}
-//
-void() playwalk		    =[   1,     playwalk1		] {if (self.velocity) { self.frame = 0; }}
-void() playwalk1		=[   2,     playwalk2		] {if (self.velocity) { self.frame = 1; }}
-void() playwalk2		=[   3,     playwalk3		] {if (self.velocity) { self.frame = 2; }}
-void() playwalk3		=[   4,     playwalk4		] {if (self.velocity) { self.frame = 3; }}
-void() playwalk4		=[   5,     playwalk5		] {if (self.velocity) { self.frame = 4; }}
-void() playwalk5		=[   6,     playwalk6		] {if (self.velocity) { self.frame = 5; }}
-void() playwalk6		=[   7,     playwalk7		] {if (self.velocity) { self.frame = 6; }}
-void() playwalk7		=[   8,     playwalk8		] {if (self.velocity) { self.frame = 7; }}
-void() playwalk8		=[   9,     playwalk8		] {if (self.velocity) { self.frame = 8; }}
-//
-void() playgetup 		=[	1,		playgetup1		] {self.frame = 38;}
-void() playgetup1 		=[	2,		playgetup2		] {self.frame = 39;}
-void() playgetup2		=[	3,		playgetup3		] {self.frame = 40;}
-void() playgetup3		=[	4,		playgetup4		] {self.frame = 41;}
-void() playgetup4		=[	5,		playgetup5		] {self.frame = 42;}
-void() playgetup5		=[	6,		playgetup6		] {self.frame = 43;}
-void() playgetup6		=[	7,		playgetup7		] {self.frame = 44;}
-void() playgetup7		=[	8,		playgetup8		] {self.frame = 45;}
-void() playgetup8		=[	9,		playgetup9		] {self.frame = 46;}
-void() playgetup9		=[	10,		playgetup10		] {self.frame = 47;}
-void() playgetup10		=[	11,		playgetup10		] {self.frame = 48;}
+// Sprinting
+void() PAnim_Sprint 	=[	1,		PAnim_Sprint1		] {self.frame = 25; self.tp_anim_time = time + 0.65;}
+void() PAnim_Sprint1 	=[	2,		PAnim_Sprint2		] {self.frame = 26;}
+void() PAnim_Sprint2	=[	3,		PAnim_Sprint3		] {self.frame = 27;}
+void() PAnim_Sprint3 	=[	4,		PAnim_Sprint4		] {self.frame = 28;}
+void() PAnim_Sprint4 	=[	5,		PAnim_Sprint5		] {self.frame = 29;}
+void() PAnim_Sprint5 	=[	6,		PAnim_Sprint6		] {self.frame = 30;}
+void() PAnim_Sprint6 	=[	7,		SUB_Null			] {self.frame = 31;}
+
+// Reloading
+void() PAnim_Reload   	=[	1,		PAnim_Reload1	  	] {self.frame = 11; self.tp_anim_time = time + 1;}
+void() PAnim_Reload1  	=[	2,		PAnim_Reload2	  	] {self.frame = 12;}
+void() PAnim_Reload2  	=[	3,		PAnim_Reload3	  	] {self.frame = 13;}
+void() PAnim_Reload3  	=[	4,		PAnim_Reload4	  	] {self.frame = 14;}
+void() PAnim_Reload4  	=[	5,		PAnim_Reload5	  	] {self.frame = 15;}
+void() PAnim_Reload5  	=[	6,		PAnim_Reload6	  	] {self.frame = 16;}
+void() PAnim_Reload6  	=[	7,		PAnim_Reload7	  	] {self.frame = 17;}
+void() PAnim_Reload7  	=[	8,		PAnim_Reload8	 	] {self.frame = 18;}
+void() PAnim_Reload8  	=[	9,		PAnim_Reload9 		] {self.frame = 19;}
+void() PAnim_Reload9   	=[	10,		PAnim_Reload10		] {self.frame = 20;}
+void() PAnim_Reload10 	=[	11,		PAnim_Reload11		] {self.frame = 21;}
+void() PAnim_Reload11 	=[	12,		PAnim_Reload12		] {self.frame = 22;}
+void() PAnim_Reload12 	=[	13,		PAnim_Reload13		] {self.frame = 23;}
+void() PAnim_Reload13 	=[	14,		SUB_Null			] {self.frame = 24;}
+
+// Firing
+void() PAnim_Fire 		=[	1,		PAnim_Fire1	  		] {self.frame = 9; self.tp_anim_time = time + 0.25;}
+void() PAnim_Fire1 		=[	2,		SUB_Null	  		] {self.frame = 10;}
+
+// Melee
+void() PAnim_Melee 		=[	1,		PAnim_Melee1	  	] {self.frame = 49; self.tp_anim_time = time + 0.65;}
+void() PAnim_Melee1 	=[	2,		PAnim_Melee2	  	] {self.frame = 50;}
+void() PAnim_Melee2 	=[	3,		PAnim_Melee3	  	] {self.frame = 51;}
+void() PAnim_Melee3 	=[	4,		PAnim_Melee4	  	] {self.frame = 52;}
+void() PAnim_Melee4 	=[	5,		PAnim_Melee5	  	] {self.frame = 53;}
+void() PAnim_Melee5 	=[	6,		PAnim_Melee6	  	] {self.frame = 54;}
+void() PAnim_Melee6 	=[	7,		SUB_Null	  		] {self.frame = 55;}
+
+// Weapon Swap
+void() PAnim_Swap 		=[	1,		PAnim_Swap1	  		] {self.frame = 56; self.tp_anim_time = time + 1;}
+void() PAnim_Swap1 		=[	2,		PAnim_Swap2	  		] {self.frame = 57;}
+void() PAnim_Swap2 		=[	3,		PAnim_Swap3	  		] {self.frame = 58;}
+void() PAnim_Swap3 		=[	4,		PAnim_Swap4	  		] {self.frame = 59;}
+void() PAnim_Swap4 		=[	5,		PAnim_Swap5	  		] {self.frame = 60;}
+void() PAnim_Swap5 		=[	6,		PAnim_Swap6	  		] {self.frame = 61;}
+void() PAnim_Swap6 		=[	7,		PAnim_Swap7	  		] {self.frame = 62;}
+void() PAnim_Swap7 		=[	8,		PAnim_Swap8	  		] {self.frame = 63;}
+void() PAnim_Swap8 		=[	9,		SUB_Null	  		] {self.frame = 64;}
+
+// Enter Dolphin Dive 
+void() PAnim_EnterDive 	=[	1,		PAnim_EnterDive1	] {self.frame = 203; self.tp_anim_time = time + 5;}
+void() PAnim_EnterDive1 =[	2,		PAnim_EnterDive2	] {self.frame = 204;}
+void() PAnim_EnterDive2 =[	3,		PAnim_EnterDive3	] {self.frame = 205;}
+void() PAnim_EnterDive3 =[	4,		PAnim_EnterDive4	] {self.frame = 206;}
+void() PAnim_EnterDive4 =[	5,		SUB_Null			] {self.frame = 207;}
+
+// Flop from Dive
+void() PAnim_Flop 		=[	1,		PAnim_Flop1			] {self.frame = 208; self.tp_anim_time = time + 1;}
+void() PAnim_Flop1 		=[	2,		PAnim_Flop2			] {self.frame = 209;}
+void() PAnim_Flop2 		=[	3,		PAnim_Flop3			] {self.frame = 210;}
+void() PAnim_Flop3 		=[	4,		SUB_Null			] {self.frame = 211;}
+
+// Enter Stand
+void() PAnim_Stand 		=[  1, 		PAnim_Stand1		] {self.frame = 114; self.tp_anim_time = time + 1;}
+void() PAnim_Stand1 	=[  2, 		PAnim_Stand2		] {self.frame = 113;}
+void() PAnim_Stand2 	=[  3, 		SUB_Null			] {self.frame = 0;}
+
+// Enter Crouch
+void() PAnim_Crouch 	=[  1, 		PAnim_Crouch1		] {self.frame = 113; self.tp_anim_time = time + 0.5;}
+void() PAnim_Crouch1 	=[  2, 		PAnim_Crouch2		] {self.frame = 114;}
+void() PAnim_Crouch2 	=[  3, 		SUB_Null			] {self.frame = 115;}
+
+// Walking, while Crouch
+void() PAnim_CrouchWalk =[  1, 		PAnim_CrouchWalk1	] {self.frame = 116; self.tp_anim_time = time + 0.5;}
+void() PAnim_CrouchWalk1=[  2, 		PAnim_CrouchWalk2	] {self.frame = 117;}
+void() PAnim_CrouchWalk2=[  3, 		PAnim_CrouchWalk3	] {self.frame = 118;}
+void() PAnim_CrouchWalk3=[  4, 		PAnim_CrouchWalk4	] {self.frame = 119;}
+void() PAnim_CrouchWalk4=[  5, 		PAnim_CrouchWalk5	] {self.frame = 120;}
+void() PAnim_CrouchWalk5=[  6, 		PAnim_CrouchWalk6	] {self.frame = 121;}
+void() PAnim_CrouchWalk6=[  7, 		PAnim_CrouchWalk7	] {self.frame = 122;}
+void() PAnim_CrouchWalk7=[  8, 		PAnim_CrouchWalk8	] {self.frame = 123;}
+void() PAnim_CrouchWalk8=[  9, 		SUB_Null			] {self.frame = 124;}
+
+// Reloading, while Crouch
+void() PAnim_CrReload   =[	1,		PAnim_CrReload1	  	] {self.frame = 128; self.tp_anim_time = time + 1;}
+void() PAnim_CrReload1  =[	2,		PAnim_CrReload2	  	] {self.frame = 129;}
+void() PAnim_CrReload2  =[	3,		PAnim_CrReload3	  	] {self.frame = 130;}
+void() PAnim_CrReload3  =[	4,		PAnim_CrReload4	  	] {self.frame = 131;}
+void() PAnim_CrReload4  =[	5,		PAnim_CrReload5	  	] {self.frame = 132;}
+void() PAnim_CrReload5  =[	6,		PAnim_CrReload6	  	] {self.frame = 133;}
+void() PAnim_CrReload6  =[	7,		PAnim_CrReload7	  	] {self.frame = 134;}
+void() PAnim_CrReload7  =[	8,		PAnim_CrReload8	 	] {self.frame = 135;}
+void() PAnim_CrReload8  =[	9,		PAnim_CrReload9 	] {self.frame = 136;}
+void() PAnim_CrReload9  =[	10,		SUB_Null			] {self.frame = 115;}
+
+// Firing, while Crouch
+void() PAnim_CrouchFire =[	1,		PAnim_CrouchFire1	] {self.frame = 126; self.tp_anim_time = time + 0.25;}
+void() PAnim_CrouchFire1=[	2,		SUB_Null	  		] {self.frame = 127;}
+
+// Enter Prone
+void() PAnim_Prone 		=[  1, 		PAnim_Prone1		] {self.frame = 154; self.tp_anim_time = time + 1.5;}
+void() PAnim_Prone1 	=[  2, 		PAnim_Prone2		] {self.frame = 155;}
+void() PAnim_Prone2 	=[  3, 		PAnim_Prone3		] {self.frame = 156;}
+void() PAnim_Prone3 	=[  4, 		PAnim_Prone4		] {self.frame = 157;}
+void() PAnim_Prone4 	=[  5, 		PAnim_Prone5		] {self.frame = 158;}
+void() PAnim_Prone5 	=[  6, 		PAnim_Prone6		] {self.frame = 159;}
+void() PAnim_Prone6 	=[  7, 		PAnim_Prone7		] {self.frame = 160;}
+void() PAnim_Prone7 	=[  8, 		PAnim_Prone8		] {self.frame = 161;}
+void() PAnim_Prone8 	=[  9, 		SUB_Null			] {self.frame = 162;}
+
+// Walking, while Prone
+void() PAnim_ProneWalk	=[  1, 		PAnim_ProneWalk1	] {self.frame = 162; self.tp_anim_time = time + 1.5;}
+void() PAnim_ProneWalk1	=[  2, 		PAnim_ProneWalk2	] {self.frame = 163;}
+void() PAnim_ProneWalk2	=[  3, 		PAnim_ProneWalk3	] {self.frame = 164;}
+void() PAnim_ProneWalk3	=[  4, 		PAnim_ProneWalk4	] {self.frame = 165;}
+void() PAnim_ProneWalk4	=[  5, 		PAnim_ProneWalk5	] {self.frame = 166;}
+void() PAnim_ProneWalk5	=[  6, 		PAnim_ProneWalk6	] {self.frame = 167;}
+void() PAnim_ProneWalk6	=[  7, 		PAnim_ProneWalk7	] {self.frame = 168;}
+void() PAnim_ProneWalk7	=[  8, 		PAnim_ProneWalk8	] {self.frame = 169;}
+void() PAnim_ProneWalk8	=[  9, 		PAnim_ProneWalk9	] {self.frame = 170;}
+void() PAnim_ProneWalk9	=[  10, 	PAnim_ProneWalk10	] {self.frame = 171;}
+void() PAnim_ProneWalk10=[  11, 	PAnim_ProneWalk11	] {self.frame = 172;}
+void() PAnim_ProneWalk11=[  12, 	PAnim_ProneWalk12	] {self.frame = 173;}
+void() PAnim_ProneWalk12=[  13, 	SUB_Null			] {self.frame = 174;}
+
+// Reloading, while Prone
+void() PAnim_PrReload   =[	1,		PAnim_PrReload1	  	] {self.frame = 176; self.tp_anim_time = time + 1;}
+void() PAnim_PrReload1  =[	2,		PAnim_PrReload2	  	] {self.frame = 177;}
+void() PAnim_PrReload2  =[	3,		PAnim_PrReload3	  	] {self.frame = 178;}
+void() PAnim_PrReload3  =[	4,		PAnim_PrReload4	  	] {self.frame = 179;}
+void() PAnim_PrReload4  =[	5,		PAnim_PrReload5	  	] {self.frame = 180;}
+void() PAnim_PrReload5  =[	6,		PAnim_PrReload6	  	] {self.frame = 181;}
+void() PAnim_PrReload6  =[	7,		SUB_Null	  		] {self.frame = 162;}
+
+// Enter Crouch, from Prone
+void() PAnim_UpCrouch 	=[  1, 		PAnim_UpCrouch1		] {self.frame = 161; self.tp_anim_time = time + 1;}
+void() PAnim_UpCrouch1 	=[  2, 		PAnim_UpCrouch2		] {self.frame = 160;}
+void() PAnim_UpCrouch2 	=[  3, 		PAnim_UpCrouch3		] {self.frame = 159;}
+void() PAnim_UpCrouch3 	=[  4, 		PAnim_UpCrouch4		] {self.frame = 158;}
+void() PAnim_UpCrouch4 	=[  5, 		PAnim_UpCrouch5		] {self.frame = 157;}
+void() PAnim_UpCrouch5 	=[  6, 		PAnim_UpCrouch6		] {self.frame = 156;}
+void() PAnim_UpCrouch6 	=[  7, 		PAnim_UpCrouch7		] {self.frame = 155;}
+void() PAnim_UpCrouch7 	=[  8, 		PAnim_UpCrouch8		] {self.frame = 154;}
+void() PAnim_UpCrouch8 	=[  9, 		SUB_Null			] {self.frame = 115;}
+
+// Enter Last Stand
+void() PAnim_GetDown	=[	1, 		PAnim_GetDown1		] {self.frame = 32; self.tp_anim_time = time + 1;};
+void() PAnim_GetDown1	=[	2, 		PAnim_GetDown2		] {self.frame = 33;};
+void() PAnim_GetDown2	=[	3, 		PAnim_GetDown3		] {self.frame = 34;};
+void() PAnim_GetDown3	=[	4, 		PAnim_GetDown4		] {self.frame = 35;};
+void() PAnim_GetDown4	=[	5, 		PAnim_GetDown5		] {self.frame = 36;};
+void() PAnim_GetDown5	=[	6, 		SUB_Null			] {self.frame = 37; rec_downed();};
+
+// Firing, while in Last Stand
+void() PAnim_LastFire 	=[	1,		PAnim_LastFire1		] {self.frame = 36; self.tp_anim_time = time + 0.25;}
+void() PAnim_LastFire1  =[	2,		SUB_Null			] {self.frame = 37;} 
+
+// Leave Last Stand
+void() PAnim_GetUp 		=[	1,		PAnim_GetUp1		] {self.frame = 39; self.tp_anim_time = time + 1;}
+void() PAnim_GetUp1		=[	2,		PAnim_GetUp2		] {self.frame = 40;}
+void() PAnim_GetUp2		=[	3,		PAnim_GetUp3		] {self.frame = 41;}
+void() PAnim_GetUp3		=[	4,		PAnim_GetUp4		] {self.frame = 42;}
+void() PAnim_GetUp4		=[	5,		PAnim_GetUp5		] {self.frame = 43;}
+void() PAnim_GetUp5		=[	6,		PAnim_GetUp6		] {self.frame = 44;}
+void() PAnim_GetUp6		=[	7,		PAnim_GetUp7		] {self.frame = 45;}
+void() PAnim_GetUp7		=[	8,		PAnim_GetUp8		] {self.frame = 46;}
+void() PAnim_GetUp8		=[	9,		PAnim_GetUp9		] {self.frame = 47;}
+void() PAnim_GetUp9		=[	10,		SUB_Null			] {self.frame = 48;}
+
 
 #define forward 	0
 #define backward 	1
@@ -158,6 +259,19 @@ float(float dir) checkMovement =
 	}
 }
 
+//
+// Player_CanStandHere
+// Performs a tracebox and will return true
+// if the player can stance in their current
+// space.
+//
+float(entity who) Player_CanStandHere =
+{
+	tracebox(who.origin, PLAYER_MINS_STANDING, PLAYER_MAXS_STANDING, who.origin, true, who);
+
+	return !trace_startsolid;
+}
+
 void() PlayerJump =
 {
 	if (!(self.flags & FL_ONGROUND) 
@@ -168,7 +282,6 @@ void() PlayerJump =
 	}
 			
 	self.flags = self.flags - (self.flags & FL_JUMPRELEASED);
-	sound(self, CHAN_VOICE, "sounds/player/jump.wav", 1, 1.75);
 
 	if (self.button2)
 		self.button2 = 0;
@@ -197,18 +310,19 @@ void(float override) JumpCheck =
 			  W_SprintStop();
 		  }
 			PlayerJump();
-		} else if (self.view_ofs_z == self.new_ofs_z && (self.flags & FL_ONGROUND)) {
+		} else if (self.view_ofs_z == self.new_ofs_z && (self.flags & FL_ONGROUND) && Player_CanStandHere(self)) {
 			switch(self.stance) {
 				case 0:
-					self.new_ofs_z = self.view_ofs_z + 42;
+					self.new_ofs_z = self.view_ofs_z + PLAYER_CROUCH_HEIGHT + PLAYER_PRONE_HEIGHT;
 					self.stance = 2;
 					break;
 				case 1:
-					self.new_ofs_z = self.view_ofs_z + 24;
+					self.new_ofs_z = self.view_ofs_z + PLAYER_CROUCH_HEIGHT;
 					self.stance = 2;
 					break;
 				default: break;
 			}
+			setsize(self, PLAYER_MINS_STANDING, PLAYER_MAXS_STANDING);
 		}
 	} else
 		self.flags = self.flags | FL_JUMPRELEASED;
@@ -235,7 +349,7 @@ void() PlayerPreThink =
 
 #endif // FTE
 
-			playrun1();
+			//playrun1();
 			self.maxspeed *= 1.5; // down from 1.66x, to match WaW
 		} else if (!self.sprinting && !self.zoom) {
 
@@ -265,7 +379,7 @@ void() PlayerPreThink =
 		
 		switch(self.stance) {
 			case 1:
-				self.maxspeed *= 0.5;
+				self.maxspeed *= 0.65;
 				break;
 			case 0:
 				self.maxspeed *= 0.25;
@@ -282,11 +396,12 @@ void() PlayerPreThink =
 
 #endif // FTE
 
-		self.maxspeed *= GetWeaponWalkSpeed(self.perks, self.weapon);
+		if (!self.isBuying)
+			self.maxspeed *= GetWeaponWalkSpeed(self.perks, self.weapon);
 	}
 	if(self.isspec != 0 && !self.downed)
 	{
-		if(self.button0)
+		if(self.button0 && self.fire_delay < time)
 		{
 			self.aiment = find(self.aiment, classname, "player");
 			if(self.aiment != world)
@@ -303,6 +418,7 @@ void() PlayerPreThink =
 				sprint(self, PRINT_HIGH, "Freefly spectate\n");
 				self.movetype = MOVETYPE_FLY;
 			}
+			self.fire_delay = time + 0.25;
 		}
 		if(self.aiment != world)
 		{
@@ -322,17 +438,33 @@ void() PlayerPreThink =
 
 	JumpCheck(0);
 
-	// refuel/cool m2
+	// Fire effect
+	if (self.onfire) {
+		Effect_Fire(self.origin);
+
+		if (self.fire_timeout < time)
+			self.onfire = false;
+	}
+
+	// refuel/cool flamethrowers
 	if (self.ltime < time) {
-		if (self.currentmag == 0 && !self.cooldown) {
+		// FIXME: Weapon hardcode definition.
+		float weapon_slot = Weapon_PlayerHasWeapon(self, W_M2, true);
+
+		if (weapon_slot == 0)
+			return;
+
+		weapon_slot--;
+		if (self.weapons[weapon_slot].weapon_magazine == 0 && !self.cooldown) {
 			self.cooldown = true;
 		}
 
-		if (self.cooldown && self.currentmag > 20)
+		if (self.cooldown && self.weapons[weapon_slot].weapon_magazine > 20)
 			self.cooldown = false;
 		
-		if (self.weapon == W_M2 || self.weapon == W_FIW && self.currentmag < getWeaponMag(self.weapon))
-			self.currentmag += 1;
+		if (self.weapons[weapon_slot].weapon_magazine < getWeaponMag(self.weapons[weapon_slot].weapon_id)) {
+			self.weapons[weapon_slot].weapon_magazine += 1;
+		}
 
 		self.ltime = time + 0.1;
 	}
@@ -341,39 +473,80 @@ void() PlayerPreThink =
 float player_trace_time;
 void() PlayerPostThink =
 {
+
+#ifdef FTE
+
+	// Network everything
+	self.SendFlags = 1;
+
+#endif // FTE
+
 	if(self.isspec)
 		return;
-			
+
+#ifndef FTE
+
+	if (time < 5 && self.name != "")
+		nzp_setplayername(self, self.name);
+
+#endif // FTE
+
 	//landsound
-	if((self.oldvelocity_z < -10) && (self.flags & FL_ONGROUND))
+	if((self.oldvelocity_z < -212) && (self.flags & FL_ONGROUND))
 	{
-		if(self.oldvelocity_z < -270)
-			sound(self, CHAN_BODY, "sounds/player/land.wav", 1, 1.75);
+		sound(self, CHAN_BODY, "sounds/player/land.wav", 0.6, 1.75);
 		self.lastsound_time = time - 0.15;
+	}
+
+	// Walking Animations
+	if (self.tp_anim_time < time && self.reload_delay < time && self.reload_delay2 < time 
+	&& self.fire_delay < time && self.fire_delay2 < time && self.knife_delay < time) {
+		if (vlen(self.velocity) > 20) {
+			if (self.sprinting) {
+				PAnim_Sprint();
+				self.tp_anim_type = PLAYER_ANIM_SPRINT;
+			} else {
+				self.tp_anim_type = PLAYER_ANIM_WALK;
+				switch(self.stance) {
+					case 2: PAnim_Walk(); break;
+					case 1: PAnim_CrouchWalk(); break;
+					case 0: PAnim_ProneWalk(); break;
+				}
+			}
+		} else {
+			// Stand still so Crouch Walk isn't stuck in place
+			switch(self.stance) {
+				case 2: self.frame = 0; break;
+				case 1: self.frame = 115; break;
+				case 0: self.frame = 162; break;
+			}
+
+			// If we're downed force set the last stand idle frame as well
+			// so the player doesn't look like they're just prone.
+			if (self.downed)
+				self.frame = 37;
+		}
 	}
 	
 #ifdef FTE
 
 	//footsteps
-	if((vlen(self.velocity) > 100) &&(( time - self.lastsound_time > 0.4) || (time - self.lastsound_time > 0.3 && self.sprinting)) && (self.flags & FL_ONGROUND))
+	if((vlen(self.velocity) > 20) &&(( time - self.lastsound_time > 0.4) || (time - self.lastsound_time > 0.3 && self.sprinting)) && (self.flags & FL_ONGROUND))
 	{
-		local float movelen = vlen(input_movevalues);
+		float movelen = vlen(input_movevalues);
 		if(movelen > 300)
-		{
-			if (!self.sprinting)
-				playwalk();
-				
+		{		
 			local float ran = random();
 			if(ran > 0.8)
-				sound(self, CHAN_BODY, "sounds/player/footstep1.wav", 0.8, 2.5);
+				sound(self, CHAN_BODY, "sounds/player/footstep1.wav", 0.6, 2.5);
 			else if(ran > 0.6)
-				sound(self, CHAN_BODY, "sounds/player/footstep2.wav", 0.8, 2.5);
+				sound(self, CHAN_BODY, "sounds/player/footstep2.wav", 0.6, 2.5);
 			else if(ran > 0.4)
-				sound(self, CHAN_BODY, "sounds/player/footstep3.wav", 0.8, 2.5);
+				sound(self, CHAN_BODY, "sounds/player/footstep3.wav", 0.6, 2.5);
 			else if(ran > 0.2)
-				sound(self, CHAN_BODY, "sounds/player/footstep4.wav", 0.8, 2.5);
+				sound(self, CHAN_BODY, "sounds/player/footstep4.wav", 0.6, 2.5);
 			else
-				sound(self, CHAN_BODY, "sounds/player/footstep5.wav", 0.8, 2.5);
+				sound(self, CHAN_BODY, "sounds/player/footstep5.wav", 0.6, 2.5);
 			self.lastsound_time = time;
 		}
 	}
@@ -506,23 +679,65 @@ void() ClientConnect =
 	}	
 };
 
-void() PollPlayerPoints =
+//
+// Player_PickSpawnPoint()
+// Picks a valid spawn point for the
+// newly spawning player, as well as
+// assigns any spawn-specific fields
+// (e.g., starting weapon).
+//
+void() Player_PickSpawnPoint =
 {
-	float i, breakpoint;
-	entity pollent;
-	breakpoint = 0;
-	
-	for (i = 1; i <= 4 && !breakpoint; i++)
-	{
-		pollent = findfloat(world, playernum, i);
-		
-		if (pollent == world) {
-			breakpoint = 1;
-			break;
+	entity spawn_point = world;
+	float found_viable_spawn = false;
+
+	// Assign a location
+	while(!found_viable_spawn) {
+		float index = random();
+
+		// assign one of the spawnpoints
+		if (index < 0.25)
+			spawn_point = find(world, classname, SPAWN_1_CLASS);
+		else if (index < 0.50)
+			spawn_point = find(world, classname, SPAWN_2_CLASS);
+		else if (index < 0.75)
+			spawn_point = find(world, classname, SPAWN_3_CLASS);
+		else
+			spawn_point = find(world, classname, SPAWN_4_CLASS);
+
+		float found_player_here = false;
+
+		entity ents_in_spawn_range = findradius(spawn_point.origin, 32);
+
+		// check if there's a player in the way
+		while(ents_in_spawn_range != world) {
+			if (ents_in_spawn_range.classname == "player")
+				found_player_here = true;
+
+			ents_in_spawn_range = ents_in_spawn_range.chain;
 		}
-		UpdatePlayerPoints(i, pollent.points, pollent.kills, 0, pollent.netname, pollent);
+
+		// no player in the way, this spawn is good.
+		if (found_player_here == false)
+			found_viable_spawn = true;
 	}
-}
+
+	// Give them their name
+	self.name = spawn_point.name;
+
+	// Set their location
+	self.origin = spawn_point.origin + '0 0 1';
+	self.angles = spawn_point.angles;
+
+	// Assign their starting weapon
+	Weapon_AssignWeapon(0, spawn_point.weapon, spawn_point.currentmag, spawn_point.currentammo);
+
+	// Activate anything the Spawn was targeting
+	entity tempe = self;
+	self = spawn_point;
+	SUB_UseTargets();
+	self = tempe;
+};
 
 void() PlayerSpawn =
 {	
@@ -532,6 +747,9 @@ void() PlayerSpawn =
 	self.isspec = FALSE;
 	self.classname = "player";
 	self.solid = SOLID_BBOX;
+
+	self.onfire = false;
+	self.fire_timeout = 0;
 
 	// We can only collide with zombies (and not their limbs)
 
@@ -550,7 +768,6 @@ void() PlayerSpawn =
 	{
 		if(who)
 		{
-			coop = 1;
 			player_count++;
 			break;
 		}
@@ -562,69 +779,15 @@ void() PlayerSpawn =
 			pl1 = self;
 	}
 
-	float viable_spawnpoint = false;
-
-	// if the mapper doesn't have the co-op ents set up, just plop everyone at the
-	// normal start.
-	if (find(world, classname, "info_player_tank") == world && 
-	find(world, classname, "info_player_nikolai") == world &&
-	find(world, classname, "info_player_takeo") == world && 
-	find(world, classname, "info_player_doctor") == world) {
-		spawnpoint = find(world, classname, "info_player_start");
-		viable_spawnpoint = true;
-	}
-
-	//
-	// pick a random spawn point regardless of solo or co-op
-	//
-
-	while(!viable_spawnpoint) {
-		float number = random();
-
-		// assign one of the spawnpoints
-		if (number < 0.25)
-			spawnpoint = find(world, classname, "info_player_tank");
-		else if (number < 0.50)
-			spawnpoint = find(world, classname, "info_player_nikolai");
-		else if (number < 0.75)
-			spawnpoint = find(world, classname, "info_player_takeo");
-		else
-			spawnpoint = find(world, classname, "info_player_doctor");
-
-		float found_player_here = false;
-
-		entity ents_in_spawn_range = findradius(spawnpoint.origin, 32);
-
-		// check if there's a player in the way
-		while(ents_in_spawn_range != world) {
-			if (ents_in_spawn_range.classname == "player")
-				found_player_here = true;
-
-			ents_in_spawn_range = ents_in_spawn_range.chain;
-		}
-
-		// no player in the way, this spawn is good.
-		if (found_player_here == false)
-			viable_spawnpoint = true;
-	}
-
-	// Mapper doesn't have our specific co-op spawn set up..
-	if (spawnpoint == world)
-		spawnpoint = find(world, classname, "info_player_start");
-
+	// Assign them a spawn location.
+	Player_PickSpawnPoint();
 	
-	self.origin = spawnpoint.origin + [0,0,1];
-	self.angles = spawnpoint.angles;
-	self.fixangle = TRUE;
-	setsize(self, [-16, -16, -32], [16, 16, 40]);
+	self.fixangle = true;
+	setsize(self, PLAYER_MINS_STANDING, PLAYER_MAXS_STANDING);
 	self.view_ofs = VEC_VIEW_OFS; // naievil -- set view_ofs to 32 to maintain half life (64) sizes
 	self.stance = 2;
 	self.new_ofs_z = self.view_ofs_z;
 	self.oldz = self.origin_z;
-
-	self.currentammo = G_STARTWEAPON[2];
-	self.currentmag = G_STARTWEAPON[1];
-	self.weapon = G_STARTWEAPON[0];
 	self.grenades = self.grenades | 1;  // add frag grenades to player inventory
 	
 	if (rounds)
@@ -645,7 +808,6 @@ void() PlayerSpawn =
 
 	self.stamina = 3;
 	self.reviving = 0;
-	self.weaponnum = 0;
 	self.perks = G_PERKS;
 	SetPerk(self, self.perks);
 
@@ -659,11 +821,11 @@ void() PlayerSpawn =
 	
 #ifdef FTE
 
-	PollPlayerPoints();
 	UpdateV2model("", 0);
 	stuffcmd(self, "cl_gunx 8;cl_guny 16;cl_gunz 25\n");
 	SetRound(self, G_STARTROUND);
 	self.viewzoom = 1;
+	self.SendEntity = Player_SendEntity;
 	self.weapon_animduration = getWeaponDelay(self.weapon, FIRE);
 
 	if (G_WORLDTEXT)
@@ -674,36 +836,43 @@ void() PlayerSpawn =
 	self.Weapon_Name = GetWeaponName(self.weapon);
 	self.Flash_Offset = GetWeaponFlash_Offset(self.weapon);
 	self.Flash_Size = GetWeaponFlash_Size(self.weapon);
+	self.ADS_Offset = GetWeaponADSOfs_PSP(self.weapon);
 
 #endif // FTE
 
 	if (G_STARTROUND != 1) {
 		rounds = G_STARTROUND - 1;
 	}
-
 };
 
 void() SpectatorSpawn =
 {
 	local entity spawnpoint;
-	spawnpoint = find(world, classname, "info_player_start");
+	spawnpoint = find(world, classname, "info_player_1_spawn");
 	
 	self.isspec = TRUE;
 	self.health = 420;
 	self.classname = "spectator";
-	self.solid = SOLID_NOT;
-	setmodel(self, "");
+	self.solid = SOLID_CORPSE;
+	setmodel(self, "models/sprites/null.spr");
 	self.movetype = MOVETYPE_FLY;
 	self.origin = spawnpoint.origin + [0,0,1];
 	self.fixangle = TRUE;
-	setsize(self, [-16, -16, -24], [16, 16, 32]);
+	setsize(self, PLAYER_MINS_STANDING, PLAYER_MAXS_STANDING);
 	self.view_ofs = '0 0 22';
 	self.aiment = world;
 };
 
 //called when a client loads a map
+float spawns_initialized;
 void() PutClientInServer =
 {
+	// Init Spawn Points
+	if (!spawns_initialized) {
+		Spawns_Init();
+		spawns_initialized = true;
+	}
+
 	if(cvar("developer") || player_count > 1) {
 		bprint(PRINT_HIGH, self.netname);
 		bprint(PRINT_HIGH, " has joined the game.\n");
@@ -719,6 +888,7 @@ void() PutClientInServer =
 
 #endif // FTE
 
+	GameRestart_ResetPerkaColas();
 };
 
 //called when client disconnects from the server
@@ -731,9 +901,23 @@ void() ClientDisconnect =
 	
 	self.classname = "disconnected";
 	self.solid = SOLID_NOT;
-	self.movetype = MOVETYPE_TOSS;
+	self.movetype = MOVETYPE_BOUNCE;
 	self.nextthink = -1;
 	setmodel(self, "models/sprites/null.spr");
+
+	GameRestart_ResetPerkaColas();
+
+	if (self.downed) {
+		DisableReviveIcon(self.electro_targeted);
+		revive_index--;
+	}
+
+#ifdef FTE
+
+	// Network everything
+	self.SendFlags = 1;
+
+#endif // FTE
 };
 
 

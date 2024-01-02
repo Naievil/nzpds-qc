@@ -37,6 +37,13 @@ float walk;
 float in_menu; //what menu are we in
 float time_in_menu;
 
+// Loading screen definitions
+float in_loadscreen;
+float loadscreen_timetrigger;
+string loadscreen_mapname;
+string loadscreen_maptitle;
+string loadscreen_tip;
+
 entity player;
 entity vmodel;
 entity v2model;
@@ -60,37 +67,44 @@ vector v2model_avelocity;
 vector vmodel_muzzleoffset;
 vector v2model_muzzleoffset;
 
-const float MENU_NONE = 0;
-const float MENU_MAIN = 1;
-const float MENU_SINGLE = 2;
-const float MENU_MULTI = 4;
-const float MENU_SETTINGS = 8;
-const float MENU_ABOUT = 16;
-const float MENU_JOIN = 32;
-const float MENU_PAUSE = 64;
-const float MENU_IGS = 128;
-const float MENU_RES = 256;
-const float MENU_GSETTINGS = 512;
-const float MENU_CSETTINGS = 1024;
-const float MENU_CUSTOMS = 2048;
-const float MENU_ACHIEVEMENTS = 4096;
-const float MENU_CONSETTINGS = 8192;
-const float MENU_AUDSETTINGS = 16384;
+const float MENU_NONE 			= 0;
+const float MENU_MAIN 			= 1;
+const float MENU_SINGLE 		= 2;
+const float MENU_MULTI 			= 4;
+const float MENU_SETTINGS 		= 8;
+const float MENU_ABOUT 			= 16;
+const float MENU_JOIN 			= 32;
+const float MENU_PAUSE 			= 64;
+const float MENU_IGS 			= 128;
+const float MENU_RES 			= 256;
+const float MENU_GSETTINGS 		= 512;
+const float MENU_CSETTINGS 		= 1024;
+const float MENU_CUSTOMS 		= 2048;
+const float MENU_ACHIEVEMENTS	= 4096;
+const float MENU_CONSETTINGS 	= 8192;
+const float MENU_AUDSETTINGS 	= 16384;
+const float MENU_CREATE 		= 32768;
 
+float matchmake_enabled;
+float double_tap_version;
 
 float useprint_type;
 float useprint_weapon;
 float useprint_cost;
 float useprint_time;
 
+float bettyprompt_time;
+
 string scrolltext;
 float stext;
 float scrollopacity;
 float scrollheight;
 
+float nameprint_time;
 float HUD_Change_time; 
 float Hitmark_time;
 float crosshair_spread_time;
+float crosshair_pulse_grenade;
 float zoom_2_time;
 float broadcast_time;
 float broadcast_type;
@@ -118,10 +132,6 @@ float interpolating2;
 float rounds;
 float perks;
 float rounds_change;
-
-float playerpoints[4]; 			// player point holders, player 1 points are index 0, player 2 at 1...
-float playerkills[4];           // player kill holders, player 1 points are index 0, player 2 at 1...
-string playernames[4]; 			// player name holders, player 1 name at index 0, player 2 at 1...
 float player_count;
 float score_show;
 
@@ -158,6 +168,10 @@ vector TEXT_RED       = [1, 0, 0];
 float fade_time;
 float fade_type;
 
+.float stance;
+.float points;
+.float kills;
+
 float menu_initialized;
 
 float customs_interact;
@@ -186,25 +200,10 @@ string buttonBind[MAX_BINDS];
 string tempBind[MAX_BINDS];
 
 // resolution
-#define MAX_43      3
-#define MAX_54      1
-#define MAX_1610    5
-#define MAX_169     10
-#define MAX_219     2
 float aspectratio;
 float fullscreenval;
 float active_swidth;
 float active_sheight;
-float screen_width_43[MAX_43];
-float screen_height_43[MAX_43];
-float screen_width_54[MAX_54];
-float screen_height_54[MAX_54];
-float screen_width_1610[MAX_1610];
-float screen_height_1610[MAX_1610];
-float screen_width_169[MAX_169];
-float screen_height_169[MAX_169];
-float screen_width_219[MAX_219];
-float screen_height_219[MAX_219];
 
 int 	platform_is_web;
 
@@ -216,6 +215,13 @@ int 	platform_is_web;
 float 	stopwatch_sec;
 int 	stopwatch_min;
 int 	stopwatch_hr;
+
+// Same dealio, but for rounds
+float 	stopwatch_round_sec;
+int 	stopwatch_round_min;
+int 	stopwatch_round_hr;
+int 	stopwatch_round_isactive;
+float 	stopwatch_round_starttime;
 
 //controller buttons
 
@@ -239,3 +245,58 @@ string build_datetime;
 vector gun_kick;
 
 float hide_viewmodel;
+
+// csqc player prediction by eukara
+vector playerOrigin;
+vector playerOriginOld;
+vector playerVelocity;
+
+//
+// Screen sizes, self-explanatory.
+//
+var struct screenres_s
+{
+	float width;
+	float height;
+};
+
+screenres_s screen_resolution_5x4[] =
+{
+	{1280, 1024}
+};
+
+screenres_s screen_resolution_4x3[] =
+{
+	{640, 480},
+	{800, 600},
+	{1024, 768}
+};
+
+screenres_s screen_resolution_16x9[] =
+{
+	{640, 360},
+	{1280, 720},
+	{1360, 768},
+	{1366, 768},
+	{1536, 864},
+	{1600, 900},
+	{1920, 1080},
+	{2048, 1152},
+	{2560, 1440},
+	{3840, 2160}
+};
+
+screenres_s screen_resolution_16x10[] =
+{
+	{1280, 800},
+	{1440, 900},
+	{1680, 1050},
+	{1920, 1200},
+	{2560, 1600}
+};
+
+screenres_s screen_resolution_21x9[] =
+{
+	{2560, 1080},
+	{3840, 1440}
+};

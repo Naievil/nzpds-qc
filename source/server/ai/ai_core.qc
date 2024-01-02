@@ -27,6 +27,7 @@
 
 void(float what) play_sound_z;
 void() LinkZombiesHitbox;
+entity() Dog_FindEnemy;
 
 void() path_corner_touch =
 {
@@ -57,12 +58,23 @@ void() path_corner =
 	setsize(self, '0 0 0 ', '0 0 0');
 };
 
-
-void removeZombie();
 void() Respawn = 
 {
+	// cypress (20 dec 2023) -- whoever wrote this originally wasn't considering
+	// many factors.. if a zombie respawns there's a chance it'll be in a 
+	// completely different playspace, where the initial window isn't visible
+	// at all, and removeZombie() does not clear that field (rightfully so).
+	// so i've replaced this with the same function i use to respawn zombies
+	// inside of the playable area, which calls self.th_die() and fibs to the
+	// zombie counter a little better, fixes that issue.
+
+	// Kill it.
+	self.th_die();
+
+	// This is a pseudo-hack that just tells the rounds core that we should
+	// spawn another.
 	Current_Zombies--;
-	removeZombie();
+	Remaining_Zombies++;
 };
 
 entity(entity blarg) find_new_enemy =
@@ -125,6 +137,22 @@ entity(entity blarg) find_new_enemy =
 			targets = find(targets, classname, "zombie_horde_point");
 		}
 
+		// Last chance -- try a player spawn point.
+		targets = find(world, classname, "info_player_1_spawn");
+
+		while(targets != world) {
+			// Found one, let's see if it's closer than our last ideal target.
+			distance = vlen(blarg.origin - targets.origin);
+
+			if (distance < best_distance) {
+				best_target = targets;
+				best_distance = distance;
+			}
+
+			// Continue iterating
+			targets = find(targets, classname, "info_player_1_spawn");
+		}
+
 		// Return a horde point if we found one.
 		if (best_target != world)
 			return best_target;
@@ -174,7 +202,7 @@ float() push_away_zombies =
 	return_value = 0;
 	while(ent)
 	{
-		if(ent.classname == "ai_zombie" && ent != self)
+		if(ent.aistatus == "1" && ent != self)
 		{
 			vector push;
 			push = ent.origin - self.origin;
@@ -199,7 +227,7 @@ void(float dist, vector vec) do_walk_to_vec =
 	if(self.outside == false)
 	{
 		// this is a performance net negative for like 0 gain in horde space.
-		//push_away_zombies();
+		push_away_zombies();
 	}
 	ChangeYaw();
 	vector new_velocity;
@@ -297,12 +325,20 @@ void(float dist) Window_Walk =
 			
 			//Assumption is that when the zombie is outside, we can always walk from one path_corner to the next in a straight line, any devation should be corrected by the mapper
 		}
-		
+
 		do_walk(dist);
 		
 		if(self.goalentity.classname == "window")
 		{
-			if(!self.goalentity.box1owner)
+			// cypress (17 dec 2023) -- fixed a nasty race condition here.
+			// essentially, if a new zombie spawns in fast enough after
+			// a zombie is currently/just finished hopping a spot, they will
+			// end up always taking box1owner (the hoppable zombie)'s place,
+			// regardless of whether or not there was someone else waiting.
+			// apparently this is an issue i've created rather recently,
+			// which does not make sense to me considering this is a pretty
+			// glaring oversight that's been here since 2014. not my whoops?
+			if(!self.goalentity.box1owner && !self.goalentity.box2owner && !self.goalentity.box3owner)
 			{
 				//self.used = WBOX1;
 				self.goalentity.box1owner = self;
@@ -310,7 +346,7 @@ void(float dist) Window_Walk =
 				self.hop_step = 3;
 				self.reload_delay = time + 30;
 			}
-			else 	if(!self.goalentity.box2owner)
+			else if(!self.goalentity.box2owner)
 			{
 				//self.used = WBOX2;
 				self.goalentity.box2owner = self;
@@ -318,7 +354,7 @@ void(float dist) Window_Walk =
 				self.hop_step = 3;
 				self.reload_delay = time + 30;
 			}
-			else 	if(!self.goalentity.box3owner)
+			else if(!self.goalentity.box3owner)
 			{
 				//self.used = WBOX3;
 				self.goalentity.box3owner = self;
@@ -352,7 +388,7 @@ void(float dist) Window_Walk =
 	}
 	else if(self.hop_step == 2)//we're at idle box, waiting for a window attack box to be free...
 	{
-		if(!self.goalentity.box1owner)
+		if(self.goalentity.box1owner == world)
 		{
 			//self.used = WBOX1;
 			self.goalentity.box1owner = self;
@@ -361,7 +397,7 @@ void(float dist) Window_Walk =
 			self.reload_delay = time + 30;
 			self.th_walk();
 		}
-		else if(!self.goalentity.box2owner)
+		else if(self.goalentity.box2owner == world)
 		{
 			//self.used = WBOX2;
 			self.goalentity.box2owner = self;
@@ -370,7 +406,7 @@ void(float dist) Window_Walk =
 			self.reload_delay = time + 30;
 			self.th_walk();
 		}
-		else if(!self.goalentity.box3owner)
+		else if(self.goalentity.box3owner == world)
 		{
 			//self.used = WBOX3;
 			self.goalentity.box3owner = self;
@@ -382,6 +418,27 @@ void(float dist) Window_Walk =
 	}
 	else if(self.hop_step == 3)//walking to window attack box
 	{
+		// sometimes, we've assigned a zombie a waiting-position
+		// while another zombie is actively hopping. this can cause
+		// a bit of gameplay slowdown since the zombie has to walk
+		// to that waiting position, then to the hop spot (approx 1sec),
+		// so let's do continuous checks here to see if box1 is free,
+		// and claim it if so, in order to smooth the path and claim
+		// that time. only do this if there isn't anyone else in the queue,
+		// though.
+		if (!self.goalentity.box1owner) {
+			// Claim it as ours mid-walk, if there isn't someone else waiting.
+			if ((self.goalentity.box2owner == self && !self.goalentity.box3owner) ||
+			(self.goalentity.box3owner == self && !self.goalentity.box2owner)) {
+				self.goalentity.box1owner = self;
+				self.goalorigin = self.goalentity.box1;
+
+				// Free up the spot we were walking to before.
+				if (self.goalentity.box2owner == self) self.goalentity.box2owner = world;
+				if (self.goalentity.box3owner == self) self.goalentity.box3owner = world;
+			}
+		}
+
 		if(nearby(self.goalorigin))
 		{
 			self.hop_step = 4;
@@ -403,7 +460,7 @@ void(float dist) Window_Walk =
 				ChangeYaw();
 				return;
 			}
-			if(self.goalentity.health > 0)
+			if(self.goalentity.health > 0 && !self.goalentity.owner)
 			{
 				self.reload_delay = time + 30;
 				self.th_melee();				
@@ -412,9 +469,12 @@ void(float dist) Window_Walk =
 				else
 					self.chase_time = time + 0.75;
 				return;
+			} else if (self.goalentity.owner) {
+				self.chase_time = time + 0.05;
+				return;
 			}
 		}
-		if(self.goalentity.health <= 0)
+		if(self.goalentity.health <= 0 && !self.goalentity.owner)
 		{
 			self.outside = 2;
 			self.chase_time = 0;
@@ -423,17 +483,6 @@ void(float dist) Window_Walk =
 		else return;
 	}
 };
-
-//
-// kind of a shoddy fix, but essentially what we do to fix
-// issues with zomb ents colliding with each other during hopping
-// is make sure we wait a bit longer before freeing the window for
-// another usage.
-//
-void() free_window =
-{
-	self.usedent = world;
-}
 
 void(float dist) Window_Hop =
 {
@@ -485,20 +534,15 @@ void(float dist) Window_Hop =
 			self.tries++;
 			self.chase_time = time + 0.2;
 			if(self.tries > 10) {
-				// wait enough time before freeing window, to give time for zomb to move.
-				self.goalentity.think = free_window;
-				self.goalentity.nextthink = time + 0.5;
-				//self.goalentity.usedent = world;//free up the window if we've been waiting to hop
+				if (!self.goalentity.owner)
+					self.goalentity.usedent = world;//free up the window if we've been waiting to hop
 			}
 		}
 	}
 	
 	if(self.hop_step == 6) {
 		self.outside = FALSE;
-		//self.goalentity.usedent = world;//free up the window, we're done hopping it
-		//self.used = 0;
-		self.goalentity.think = free_window;
-		self.goalentity.nextthink = time + 0.5;
+		self.goalentity.usedent = world;//free up the window, we're done hopping it
 		self.goalentity = world;
 		self.enemy = find_new_enemy(self);
 		//self.th_die();
@@ -508,18 +552,82 @@ void(float dist) Window_Hop =
 	}
 }
 
+
+//
+// FTE's custom "tracemove" -- no way in hell I'm reimplementing SV_Move
+// in QuakeC. So this is just a really bad traceline hack. We can't even
+// use tracebox since that's limited by BSP hulls,
+//
+#ifdef FTE
+inline float(vector start, vector min, vector max, vector end, float nomonsters, entity forent) tracemove =
+#else
+float(vector start, vector min, vector max, vector end, float nomonsters, entity forent) tracemove_fake =
+#endif // FTE
+{
+	makevectors(forent.angles);
+
+	// Top left of the box
+	traceline(start + '0 0 32' + v_right * -18, end, nomonsters, forent);
+
+	// Results Check
+	if (trace_ent != forent && trace_endpos != end)
+		return 0;
+
+	// Top right of the box
+	traceline(start + '0 0 32' + v_right * 18, end, nomonsters, forent);
+
+	// Results Check
+	if (trace_ent != forent && trace_endpos != end)
+		return 0;
+
+	// Bottom left of the box
+	traceline(start - '0 0 24' + v_right * -18, end, nomonsters, forent);
+
+	// Results Check
+	if (trace_ent != forent && trace_endpos != end)
+		return 0;
+
+	// Bottom right of the box
+	traceline(start - '0 0 24' + v_right * 18, end, nomonsters, forent);
+
+	// Results Check
+	if (trace_ent != forent && trace_endpos != end)
+		return 0;
+
+	return 1;		
+}
+
 float() TryWalkToEnemy =
 {
-	//was tracebox
-	float TraceResult;
-	TraceResult = tracemove(self.origin,VEC_HULL_MIN,VEC_HULL_MAX,self.enemy.origin,TRUE,self);
-	if(TraceResult == 1) {
+
+	// Early out hack for FTE -- if there's tons of z-diff, GTFO!
+	float z_axis_diff = fabs(self.origin_z - self.enemy.origin_z);
+	if (z_axis_diff >= 30)
+		return 0;
+
+	// This has been a headache...
+	// TryWalkToEnemy is a system that attempts to ignore waypoints from a
+	// certain distance to simulate proper player-targeting. It does this
+	// using the custom builtin tracemove, which calls SV_Move to determine
+	// if it's possible for the enemy to walk directly to the target. This
+	// is problematic, however -- in that FTE does not feature this builtin
+	// since it's non-standard and was written by blubs. This means there
+	// needs to be improvisation, and as a result there is disparity here.
+	// See the custom tracemove() function for details on that.
+	// -- cypress (28 Nov 2023)
+#ifdef FTE
+	float TraceResult = tracemove(self.origin, VEC_HULL_MIN, VEC_HULL_MAX, self.enemy.origin, TRUE, self);
+#else
+	float TraceResult = tracemove_fake(self.origin, VEC_HULL_MIN, VEC_HULL_MAX, self.enemy.origin, TRUE, self);
+#endif // FTE
+
+	if (TraceResult == 1) {
 		self.goalentity = self.enemy;
 		self.chase_time = time + 7;
 		return 1;
-	} else {	
-		return 0;	
-	}		
+	} else {
+		return 0;
+	}
 };
 
 void() PathfindToEnemy =
@@ -607,28 +715,19 @@ void() NextPathfindToEnemy {
 
 }
 
-#ifdef FTE
-
-inline float(vector start, vector min, vector max, vector end, float nomonsters, entity forent) tracemove
-{
-	//was tracebox
-	traceline(start,end,nomonsters,forent);
-	
-	if(trace_ent == forent || trace_endpos == end) {
-		return 1;
-	} else {	
-		return 0;	
-	}		
-}
-
-#endif // FTE
-
 void(float dist) Inside_Walk = {
-	if(self.enemy_timeout < time || self.enemy == world || self.enemy.downed == true) {
-		self.enemy_timeout = time + 5;
-		local entity oldEnemy;
-		oldEnemy = self.enemy;
-		self.enemy = find_new_enemy(self);
+	// Hellhounds should only change targets if current one is in Last Stand
+	if (self.classname == "ai_dog" && self.enemy.downed == true) {
+		self.enemy = Dog_FindEnemy();
+	} 
+	// Normal Zombie time-out re-targeting
+	else if (self.classname != "ai_dog") {
+		if(self.enemy_timeout < time || self.enemy == world || self.enemy.downed == true) {
+			self.enemy_timeout = time + 5;
+			local entity oldEnemy;
+			oldEnemy = self.enemy;
+			self.enemy = find_new_enemy(self);
+		}
 	}
 	//================Check for proximity to player ===========
 	if(vlen(self.enemy.origin - self.origin) < 60) {
@@ -638,9 +737,16 @@ void(float dist) Inside_Walk = {
 		
 		if(self.attack_delay < time) {
 			self.attack_delay = time + 1 + (1 * random());
-			self.th_melee();  
-			if (self.enemy.downed == true)
-				self.enemy = find_new_enemy(self);
+
+			if (self.enemy.health)
+				self.th_melee(); 
+
+			if (self.enemy.downed == true) {
+				if (self.classname == "ai_dog")
+					self.enemy = Dog_FindEnemy();
+				else
+					self.enemy = find_new_enemy(self);
+			}
 			self.goalentity = self.enemy;
 			self.chase_time = time + 5;
 		}
@@ -699,8 +805,7 @@ void(float dist) Zombie_Walk =  {
 	self.velocity_y = 0;
 	//self.flags = self.flags | FL_PARTIALGROUND;
 
-	//check_onfire();
-	if (!(self.flags & FL_ONGROUND)) {
+	if (!(self.flags & FL_ONGROUND) && self.watertype != CONTENT_WATER) {
 
 		if (!self.droptime) {
 			self.droptime = time + 1;
@@ -762,10 +867,20 @@ void() Hellhound_AI =
 	Inside_Walk(0);
 }
 
-//This function ensures that only one zombie's ai is done at a time, brings down lag significantly
-void() Do_Zombie_AI = {
-	local entity z;
+//
+// Do_Zombie_AI()
+// Behaves differently based on platform -- in FTE,
+// all AI can afford to be executed at once. However,
+// on every other platform there is a timed delay in
+// place and only one zombie AI can be updated at a time.
+//
+void() Do_Zombie_AI = 
+{
+	entity z;
+	entity old_self;
 	
+#ifndef FTE
+
 	z = find(lastzombie,aistatus,"1");
 	if(z == world) {
 		z = find(world,aistatus,"1");
@@ -773,71 +888,88 @@ void() Do_Zombie_AI = {
 			return;//no zombies alive.
 		}
 	}
-	local entity oself;	
-	oself = self;
+
+	old_self = self;
 	self = z;
+
 	if(z.classname == "ai_zombie")
 		Zombie_AI();
 	else if (z.classname == "ai_dog")
 		Hellhound_AI();
-	self = oself;
+
+	self = old_self;
 	lastzombie = z;
+
+#else
+
+	z = find(world, aistatus, "1");
+
+	while(z != world) {
+		old_self = self;
+		self = z;
+
+		// Execute AI
+		if (z.classname == "ai_zombie")
+			Zombie_AI();
+		else if (z.classname == "ai_dog")
+			Hellhound_AI();
+
+		self = old_self;
+		z = find(z, aistatus, "1");
+	}
+
+#endif // FTE
+
 }
 
 #ifdef FTE
 
 void() AI_SetAllEnemiesBBOX =
 {
-	entity list;
+	entity zombies = find(world, classname, "ai_zombie");
 
-	// First target zombies
-	list = find(world, classname, "ai_zombie");
-	while (list != world) {
-		list.last_solid = list.solid;
-		list.solid = SOLID_BBOX;
-		list.had_solid_modified = true;
+	while(zombies != world) {
+		if (zombies.aistatus == "1") {
+			zombies.last_solid = zombies.solid;
+			zombies.solid = SOLID_BBOX;
 
-		if (list.head) {
-			list.head.last_solid = list.head.solid;
-			list.head.solid = SOLID_BBOX;
-			list.head.had_solid_modified = true;
+			if (zombies.head) {
+				zombies.head.last_solid = zombies.head.solid;
+				zombies.head.solid = SOLID_BBOX;
+			}
+
+			if (zombies.larm) {
+				zombies.larm.last_solid = zombies.larm.solid;
+				zombies.larm.solid = SOLID_BBOX;
+			}
+
+			if (zombies.rarm) {
+				zombies.rarm.last_solid = zombies.rarm.solid;
+				zombies.rarm.solid = SOLID_BBOX;
+			}
 		}
-		if (list.larm) {
-			list.larm.last_solid = list.larm.solid;
-			list.larm.solid = SOLID_BBOX;
-			list.larm.had_solid_modified = true;
-		}
-		if (list.rarm) {
-			list.rarm.last_solid = list.rarm.solid;
-			list.rarm.solid = SOLID_BBOX;
-			list.larm.had_solid_modified = true;
-		}
-
-		list = find(list, classname, "ai_zombie");
-	}
-
-	// Now Dogs
-	list = find(world, classname, "ai_dog");
-	while (list != world) {
-		list.last_solid = list.solid;
-		list.solid = SOLID_BBOX;
-		list.had_solid_modified = true;
-
-		list = find(list, classname, "ai_dog");
+		
+		zombies = find(zombies, classname, "ai_zombie");
 	}
 }
 
 void() AI_RevertEnemySolidState =
 {
-	entity list;
+	entity zombies = find(world, classname, "ai_zombie");
 
-	list = findfloat(world, had_solid_modified, true);
+	while(zombies != world) {
+		if (zombies.aistatus == "1") {
+			zombies.solid = zombies.last_solid;
 
-	while (list != world) {
-		list.solid = list.last_solid;
-		list.had_solid_modified = false;
+			if (zombies.head)
+				zombies.head.solid = zombies.head.last_solid;
+			if (zombies.larm)
+				zombies.larm.solid = zombies.larm.last_solid;
+			if (zombies.rarm)
+				zombies.rarm.solid = zombies.rarm.last_solid;
+		}
 
-		list = findfloat(list, had_solid_modified, true);
+		zombies = find(zombies, classname, "ai_zombie");
 	}
 }
 

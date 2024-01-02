@@ -56,6 +56,16 @@ void() MBOX_OpenAnimation7 = [7, MBOX_OpenAnimation8 ] { self.frame = 7; MBOX_Up
 void() MBOX_OpenAnimation8 = [8, SUB_Null            ] { self.frame = 8; MBOX_UpdateGlowFrame(); };
 
 //
+// MBOX_WaitEnd()
+// Ends the per-use delay for the Mystery Box.
+//
+void() MBOX_WaitEnd =
+{
+	self.boxstatus = 0;
+	self.think = SUB_Null;
+}
+
+//
 // MBOX_Reset()
 // Resets the Mystery Box to be ready for
 // another use.
@@ -63,7 +73,12 @@ void() MBOX_OpenAnimation8 = [8, SUB_Null            ] { self.frame = 8; MBOX_Up
 inline void() MBOX_Reset = 
 {
 	self.frame = 0;
-	self.boxstatus = 0;
+	self.boxstatus = -1;
+
+	// Add a 3 second delay before the Mystery Box
+	// can be interact with again.
+	self.think = MBOX_WaitEnd;
+	self.nextthink = time + 3;
 };
 
 //
@@ -87,6 +102,7 @@ void(entity ent) MBOX_FreeEnt =
 	ent.touch = SUB_Null;
 	ent.think = SUB_Null;
     ent.effects = 0;
+	ent.frame = 0;
 
 #ifdef FTE
 
@@ -120,7 +136,8 @@ float(entity user) MBOX_GetRandomBoxWeapon =
 {
     float weapon_index = rint((random() * (MAX_BOX_WEAPONS - 1)));
     float weapon_id = mystery_box_weapons[weapon_index].weapon_id;
-    float weapon_allowed = mystery_box_weapons[weapon_index].allowed;
+    float weapon_allowed = mystery_box_weapons[weapon_index].allowed && 
+							!mystery_box_weapons[weapon_index].already_obtained;
 
     if (weapon_allowed == true && !Weapon_PlayerHasWeapon(user, weapon_id, true))
         return weapon_id;
@@ -196,6 +213,7 @@ void() findboxspot =
 		setmodel(g, mystery_box_glow_model);
 		setorigin(g,newspot.origin);
 		g.angles = newspot.angles;
+		g.effects = EF_FULLBRIGHT;
 
 #ifdef FTE
 
@@ -523,6 +541,7 @@ void() finish_mbox_setup =
 		setmodel(g, mystery_box_glow_model);
 		setorigin(g,self.origin);
 		g.angles = self.angles;
+		g.effects = EF_FULLBRIGHT;
 
 #ifdef FTE
 
@@ -604,6 +623,26 @@ void() mystery_box_tp_spot =
 	mystery_box_count++;
 };
 
+void() MBOX_UpdatePosessionStatus =
+{
+	// Set all weapon statuses as unobtained.
+	for(float i = 0; i < MAX_BOX_WEAPONS; i++) {
+		mystery_box_weapons[i].already_obtained = false;
+	}
+
+	entity player = find(world, classname, "player");
+
+	while(player != world) {
+		for(float i = 0; i < MAX_BOX_WEAPONS; i++) {
+			float weapon_id = mystery_box_weapons[i].weapon_id;
+			if (Weapon_PlayerHasWeapon(player, weapon_id, true) && WepDef_OnlyOneAllowed(weapon_id)) {
+				mystery_box_weapons[i].already_obtained = true;
+			}
+		}
+		player = find(player, classname, "player");
+	}
+}
+
 void() MBOX_Touch =
 {
 	entity tempe;
@@ -638,6 +677,7 @@ void() MBOX_Touch =
 				self.owner = other;
 				MBOX_PlayOpenAnimation();
 				Create_Floating_Weapon();
+				MBOX_UpdatePosessionStatus();
 				self.spins++;
 			}
 			else {
@@ -650,93 +690,12 @@ void() MBOX_Touch =
 			if (self.owner == other)
 			{
 				other.reload_delay = 0;
-				self.boxstatus = 0;
 				self.owner = world;
-				if (other.weapon != self.boxweapon.weapon && other.secondaryweapon != self.boxweapon.weapon && other.secondaryweapon && other.thirdweapon != self.boxweapon.weapon)
-				{	
-					if ((other.perks & P_MULE) && !other.thirdweapon) {
-						// store secondary weapon
-						local float tempf = other.secondaryweapon;
-						local float tempf1 = other.secondarymag;
-						local float tempf2 = other.secondaryammo;
-						local float tempf3 = other.secondarymag2;
-						// move primary to secondary
-						other.secondaryweapon = other.weapon;
-						other.secondarymag = other.currentmag;
-						other.secondarymag2 = other.currentmag2;
-						other.secondaryammo = other.currentammo;
-						// move secondary to tertiary
-						other.thirdweapon = tempf;
-						other.thirdmag = tempf1;
-						other.thirdammo = tempf2;
-						other.thirdmag2 = tempf3;
-					}	
-
-					// give boxweapon
-					other.weapon = self.boxweapon.weapon;
-          			other.currentammo = getWeaponAmmo(self.boxweapon.weapon);
-					other.currentmag = getWeaponMag(self.boxweapon.weapon);
-					other.weaponskin = 0;
-
-					if (other.weapon != W_KAR_SCOPE && other.weapon != W_HEADCRACKER && !IsDualWeapon(other.weapon)) {
-						other.weapon2model = "";
-					}
-					
-#ifndef FTE
-
-					other.Flash_Offset = GetWeaponFlash_Offset(self.boxweapon.weapon);
-					other.Flash_Size = GetWeaponFlash_Size(self.boxweapon.weapon);
-					other.Weapon_Name = GetWeaponName(self.boxweapon.weapon);
-
-#endif // FTE
-
-				}
-				else if (other.weapon == self.boxweapon.weapon)
-				{
-					other.currentammo = getWeaponAmmo(self.boxweapon.weapon);
-					other.currentmag = getWeaponMag(self.boxweapon.weapon);
-				}
-				else if (other.secondaryweapon == self.boxweapon.weapon)
-				{
-					other.secondaryammo = getWeaponAmmo(self.boxweapon.weapon);
-					other.secondarymag = getWeaponMag(self.boxweapon.weapon);
-				}
-				else if (other.thirdweapon == self.boxweapon.weapon)
-				{
-					other.thirdammo = getWeaponAmmo(self.boxweapon.weapon);
-					other.thirdmag = getWeaponMag(self.boxweapon.weapon);
-				}
-				else if (!other.secondaryweapon)
-				{
-					WeaponSwitch(other);
-					other.weapon = self.boxweapon.weapon;
-					other.currentammo = getWeaponAmmo(self.boxweapon.weapon);
-					other.currentmag = getWeaponMag(self.boxweapon.weapon);
-					other.weaponskin = GetWepSkin(self.boxweapon.weapon);
-
-#ifndef FTE
-
-					other.Flash_Offset = GetWeaponFlash_Offset(self.boxweapon.weapon);
-					other.Flash_Size = GetWeaponFlash_Size(self.boxweapon.weapon);
-					other.Weapon_Name = GetWeaponName(self.boxweapon.weapon);
-
-#endif // FTE
-
-				}
-				else if (!other.thirdweapon && (other.perks & P_MULE))
-				{
-					
-				}
 				sound(self, 0,"sounds/misc/ching.wav", 1, 1);
 				tempe = self;
 				self = other;
 
-				if (GetFrame(self.weapon, FIRST_TAKE_START) != 0)
-					Weapon_PlayViewModelAnimation(ANIM_FIRST_TAKE, SUB_Null, 0);
-				else
-					Weapon_PlayViewModelAnimation(ANIM_TAKE_OUT, SUB_Null, 0);
-
-				SwitchWeapon(self.weapon);
+				Weapon_GiveWeapon(tempe.boxweapon.weapon, 0, 0);
 				self = tempe;
 				MBOX_FreeEnt(self.boxweapon);
 				MBOX_PlayCloseAnimation();

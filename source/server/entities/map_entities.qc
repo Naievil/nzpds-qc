@@ -28,33 +28,17 @@
 string(float wep, float gorvmodel) GetWeaponModel;
 void() ReturnWeaponModel;
 
-void() flame_update = {	
-
-#ifndef FTE	
-
-	particle (self.origin, v_up, 111, 0);
-
-#else
-
-	te_flamejet(self.origin, v_up, 10);
-
-#endif // FTE
+void() flame_update = 
+{	
+	Effect_Fire(self.origin);
 
 	self.think = flame_update;
 	self.nextthink = time + random()+0.1;
 }
+
 void() place_fire =
 {
-
-#ifndef FTE
-
-	particle (self.origin, v_up*8, self.frame, 0);
-
-#else
-
-	te_flamejet(self.origin, v_up*8, 10);
-
-#endif // FTE
+	Effect_Fire(self.origin);
 
 	self.think = flame_update;
 	self.nextthink = time + random()+0.1;
@@ -63,13 +47,26 @@ void() place_fire =
 .float radioState;
 .float length;
 .string tune;
+#define SPAWNFLAG_RADIO_PLAYONCE 	1
 void() radioPlay =
 {
 	self.health = 1;
 
 	if (self.radioState == 1) {
 		sound (self, CHAN_ITEM, self.tune, 1, ATTN_NORM);
-		self.nextthink = time + self.length;
+
+
+		if (!(self.spawnflags & SPAWNFLAG_RADIO_PLAYONCE))
+#ifndef FTE
+
+			self.nextthink = time + GetSoundLen(self.tune);
+
+#else
+
+			self.nextthink = time + self.length;
+
+#endif // FTE
+
 		self.think = radioPlay;
 	} else if (self.radioState == 0) {
 		sound (self, CHAN_ITEM, "sounds/null.wav", 1, ATTN_NONE);
@@ -83,13 +80,16 @@ void() radio_hit =
 	self.health = 1;
 
 	sound (self, CHAN_ITEM, "sounds/misc/radio.wav", 1, ATTN_NORM);
-	self.nextthink = time + 1;//getSoundLen("sounds/music/tune1.wav");
+	self.nextthink = time + 1;
 	self.think = radioPlay;
 	
 	if (self.radioState == 0)
 		self.radioState = 1;
 	else if (self.radioState == 1)
 		self.radioState = 0;
+
+	if (self.spawnflags & SPAWNFLAG_RADIO_PLAYONCE)
+		self.takedamage = DAMAGE_NO;
 }
 
 void() item_radio = 
@@ -97,10 +97,13 @@ void() item_radio =
 	precache_model ("models/props/radio.mdl");
 	precache_sound ("sounds/misc/radio.wav");
 
-	if(self.tune) {
-		precache_sound (self.tune);
+	// Backwards compatibility
+	if (!self.tune) {
+		self.tune = "sounds/music/tune1.wav";
+		self.length = 10.1;
 	}
 
+	precache_sound (self.tune);
 	self.movetype = MOVETYPE_NONE;	// so it doesn't get pushed by anything
 	self.solid=SOLID_BBOX;
 	self.classname = "item_radio";

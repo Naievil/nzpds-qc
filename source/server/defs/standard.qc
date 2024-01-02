@@ -154,7 +154,7 @@ void            end_sys_globals;						// flag for structure dumping
 .float          currentmag2;
 .float          maxspeed;
 .float     		facingenemy;
-//.float        scale;
+.float          scale;
 void            end_sys_fields; 						// flag for structure dumping
 // End. Lines below this MAY be altered, to some extent
 
@@ -264,8 +264,15 @@ string  (string s)                                                              
 float(string s)                                                                                 tokenize            = #441;
 string(float num)                                                                               argv                = #442;
 // 2001-11-15 DarkPlaces general builtin functions by Lord Havoc  end
+// DP_QC_STRING_CASE_FUNCTIONS
+string  (string s)                                                                              strtolower          = #480;
 void    (string trackname)                                                                    	songegg             = #500;
 void    ()                                                                                   	nzp_maxammo         = #501;
+void    (entity who)                                                                            grenade_pulse       = #502;
+float   ()                                                                                      nzp_maxai           = #503;
+void    (entity who)                                                                            nzp_bettyprompt     = #504;
+void    (entity who, string name)                                                               nzp_setplayername   = #505;
+void    (entity who, float version)                                                             nzp_setdoubletapver = #506;
 
 //
 // constants
@@ -345,12 +352,6 @@ void    ()                                                                      
 #define		STATE_DOWN					3
 
 #define     VEC_ORIGIN                  '0 0 0'
-
-//Half Life 1 Hull Sizes ADDED BY BLUBS, COMMENTED ORIGINAL QUAKE BBOX SIZS OUT
-#define     VEC_HULL_MIN                '-16 -16 -32'
-#define     VEC_HULL_MAX                '16 16 40'
-#define     VEC_HULL2_MIN               '-32 -32 -24'
-#define     VEC_HULL2_MAX               '32 32 64'
 
 // protocol bytes
 #define     SVC_BAD                     0

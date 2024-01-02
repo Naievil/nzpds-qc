@@ -34,7 +34,6 @@ void() trigger_setskill         = {remove(self);};
 void() trigger_monsterjump      = {remove(self);};
 void() trigger_onlyregistered   = {remove(self);};
 void() trigger_push             = {remove(self);};
-void() trigger_hurt             = {remove(self);};
 // Player Starts
 void() info_player_start        = {};
 void() info_player_start2       = {};
@@ -44,6 +43,12 @@ void() info_player_tank         = {};
 void() info_player_nikolai		= {};
 void() info_player_doctor		= {};
 void() info_player_takeo		= {};
+void() info_player_1_spawn 		= {};
+void() info_player_2_spawn 		= {};
+void() info_player_3_spawn 		= {};
+void() info_player_4_spawn 		= {};
+
+void() zombie_horde_point 		= {};
 
 void() zapper1 = {remove(self);};
 void() zapper2 = {remove(self);};
@@ -76,6 +81,22 @@ void() change_frame =
 	self.think = change_frame2;
 	self.nextthink = time + 1;
 }
+
+#ifdef FTE
+
+void(void() spawnfunc) CheckSpawn =
+{
+  //do your own skill/deathmatch spawnflag checks here because the engine won't when this function exists
+  if (spawnfunc)
+    spawnfunc();
+  else
+  {
+    print(sprintf("no spawnfunc defined for %S\n", self.classname));
+    remove(self);
+  }
+};
+
+#endif // FTE
 
 #ifndef FTE
 

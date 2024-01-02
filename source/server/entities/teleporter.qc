@@ -46,6 +46,8 @@
 		- Keep track of whether player is touching instead of locking movement
 */
 
+void(vector where, float time_alive) SpawnSpark;
+
 void() teleporter_cooldown =
 {
 	self.activated = false;
@@ -72,7 +74,7 @@ void() teleport_entities_back =
     SUB_UseTargets();
     self.iszomb = 0;
 
-    bprint(PRINT_HIGH, "returning\n");
+	sound(self.entities[0], CHAN_WEAPON, "sounds/machines/elec_shock.wav", 1, ATTN_NORM);
 
     for(float i = 0; i < 4; i++) {
         if (self.entities[i].classname == "player") {
@@ -103,18 +105,15 @@ void() teleport_entities_back =
 
             player.fire_delay = player.fire_delay2 = 
             player.reload_delay = player.reload_delay2 =
-            3.0 + time;
+            2.0 + time;
+			player.speed_penalty = 0.75;
+			player.speed_penalty_time = time + 2;
 
             player.zoom = 0;
-            player.weaponmodel = player.weapon2model = "";
             player.movetype = MOVETYPE_WALK;
-
-            if (player.flags & FL_ONGROUND) {
-                player.flags -= FL_ONGROUND;
-                player.velocity = v_forward * 0;
-            }
-
-            player.flags -= (player.flags & FL_ONGROUND);
+			player.oldz = player.origin_z;
+			player.flags = player.flags & FL_ONGROUND;
+			player.velocity = '0 0 0';
 
             if (self.mode == 0)
                 self.activated = false;
@@ -122,6 +121,8 @@ void() teleport_entities_back =
             self.iszomb++;
         }
     }
+
+	SpawnSpark(en.origin + '0 0 32', 1);
 
     self.iszomb = 0;
     start_cooldown();
@@ -142,6 +143,9 @@ void(entity who) teleport_entity =
 		setorigin(who, who.origin + '0 0 40');
 	}
 
+	// Prohibit taking fall damage
+	who.oldz = who.origin_z;
+
     switch(self.iszomb) {
         case 0:
             who.origin += '20 0 0';
@@ -160,18 +164,13 @@ void(entity who) teleport_entity =
             break;
     }
 
-    who.fire_delay = who.fire_delay2 = who.reload_delay = who.reload_delay2 = 3.0 + time;
+    who.fire_delay = who.fire_delay2 = who.reload_delay = who.reload_delay2 = 2.0 + time;
+	who.speed_penalty = 0.75;
+	who.speed_penalty_time = time + 2;
     who.zoom = 0;
-    who.weaponmodel = "";
-    who.weapon2model = ""; 
 	who.movetype = MOVETYPE_WALK;
-
-    if (who.flags & FL_ONGROUND) {
-        who.flags = who.flags - FL_ONGROUND;
-        who.velocity = v_forward * 0;
-    }
- 
-    who.flags = who.flags - who.flags & FL_ONGROUND;
+    who.flags = who.flags & FL_ONGROUND;
+	who.velocity = '0 0 0';
 }
 
 void() teleport_entities =
@@ -224,6 +223,7 @@ void() teleport_pad_touch =
 		if (other.button7) {
 			self.host.isLinked = true;
 			self.host.waitLink = false;
+			sound(self, CHAN_WEAPON, "sounds/weapons/tesla/switchon.wav", 1, ATTN_NORM);
 		}
 	} else {
 		if (self.host.mode == 2) {
@@ -242,6 +242,7 @@ void() teleporter_link_touch =
 		local entity en;
 
 		en = find(world, targetname, self.target2);
+		sound(self, CHAN_WEAPON, "sounds/weapons/tesla/switchoff.wav", 1, ATTN_NORM);
 		self.waitLink = true;
 		en.host = self;
 	}
@@ -249,13 +250,15 @@ void() teleporter_link_touch =
 
 void() teleport_touch =
 {
+	entity tempe;
+
 	if (self.cooldown) {
 		useprint(other, 16, 0, 0);
 		return;
 	}
 
   	if (other.classname != "player" || self.activated)
-    	return;  
+		return;
   
   	if (!isPowerOn) {
      	useprint(other, 8, 0, 0);
@@ -294,14 +297,32 @@ void() teleport_touch =
                 people.tele_target = find(world, targetname, self.target);
                 people.movetype = MOVETYPE_NONE;
             }
-            people = people.chain;
+			else if (people.classname == "ai_dog" && !people.electro_targeted) {
+				sound(self, CHAN_WEAPON, "sounds/machines/elec_shock.wav", 1, ATTN_NORM);
+
+				tempe = self;
+				self = people;
+				self.electro_targeted = true;
+				self.th_die();
+				self = tempe;
+			}
+			else if (people.aistatus == "1" && !people.electro_targeted) 
+			{
+				tempe = self;
+				self = people;
+				Z_ElectroShock();
+				self = tempe;	
+			}
+			people = people.chain;
         }
 
         if (!other.tele_target)
 			objerror("Couldn't find target!");
 
 		self.think = teleport_entities;
-		self.nextthink = time + 3;
+		self.nextthink = time + 1;
+		SpawnSpark(self.origin + '0 0 32', 1.5);
+		sound(self, CHAN_WEAPON, "sounds/machines/elec_shock.wav", 1, ATTN_NORM);
 	}
 
 	if (other.button1) {
@@ -340,6 +361,9 @@ void() func_teleporter_entrance =
     }
 
     precache_model(self.model);
+	precache_model("models/sprites/lightning.spr");
+	precache_sound("sounds/machines/elec_shock.wav");
+	precache_sound("sounds/weapons/tesla/switchoff.wav");
 	
 	self.movetype = MOVETYPE_NONE;
 	self.solid = SOLID_TRIGGER;
@@ -398,6 +422,7 @@ void() func_teleporter_timed =
 void() func_teleporter_pad =
 {
 	precache_model ("models/props/mainframe_pad.mdl");
+	precache_sound("sounds/weapons/tesla/switchon.wav");
 	
 	self.movetype = MOVETYPE_NONE;
 	self.solid = SOLID_TRIGGER;

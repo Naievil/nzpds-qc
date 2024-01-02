@@ -3,7 +3,7 @@
 
 	main csqc code
 
-	Copyright (C) 2021 NZ:P Team
+	Copyright (C) 2021-2023 NZ:P Team
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -62,6 +62,7 @@ noref void(float apiver, string enginename, float enginever) CSQC_Init =
 	
 	precache_sound("sounds/menu/enter.wav");
 	precache_sound("sounds/menu/navigate.wav");
+	precache_model("models/player.mdl");
 
 	registercommand("togglemenu");
 	registercommand("startwalk");
@@ -70,6 +71,7 @@ noref void(float apiver, string enginename, float enginever) CSQC_Init =
 	registercommand("showscores");
 
 	cvar_set("sv_cheats", ftos(1));
+	cvar_set("r_fb_models", ftos(0));
 	autocvar(r_viewmodel_default_fov, 70);
 
 	// Runtime check if we're running this in WebASM/WebGL.
@@ -77,6 +79,10 @@ noref void(float apiver, string enginename, float enginever) CSQC_Init =
 		platform_is_web = true;
 	else
 		platform_is_web = false;
+
+	if (platform_is_web) {
+		cvar_set("com_protocolname", "NZP-REBOOT-WEB");
+	}
 		
 	//print("CSQC Started\n");
 	dummy = spawn();
@@ -99,76 +105,27 @@ noref void(float apiver, string enginename, float enginever) CSQC_Init =
 	buttonBind[10] = "+button5";
 	buttonBind[11] = "+button6";
 	buttonBind[12] = "+button3";
-	buttonBind[13] = "impulse 25";
-
-	// intialize screen resolutions
+	buttonBind[13] = "impulse 33";
 
 	// default/current width and height
 	active_swidth = cvar("vid_width");
 	active_sheight = cvar("vid_height");
 	fullscreenval = cvar("vid_fullscreen");
 
-	// 5:4
-	screen_width_54[0] = 1280;
-	screen_height_54[0] = 1024;
-	//4:3
-	screen_width_43[0] = 640;
-	screen_height_43[0] = 480;
-	screen_width_43[1] = 800;
-	screen_height_43[1] = 600;
-	screen_width_43[2] = 1024;
-	screen_height_43[2] = 768;
-	//16:10
-	screen_width_1610[0] = 1280;
-	screen_height_1610[0] = 800;
-	screen_width_1610[1] = 1440;
-	screen_height_1610[1] = 900;
-	screen_width_1610[2] = 1680;
-	screen_height_1610[2] = 1050;
-	screen_width_1610[3] = 1920;
-	screen_height_1610[3] = 1200;
-	screen_width_1610[4] = 2560;
-	screen_height_1610[4] = 1600;
-	//16:9
-	screen_width_169[0] = 640;
-	screen_height_169[0] = 360;
-	screen_width_169[1] = 1280;
-	screen_height_169[1] = 720;
-	screen_width_169[2] = 1360;
-	screen_height_169[2] = 768;
-	screen_width_169[3] = 1366;
-	screen_height_169[3] = 768;
-	screen_width_169[4] = 1536;
-	screen_height_169[4] = 864;
-	screen_width_169[5] = 1600;
-	screen_height_169[5] = 900;
-	screen_width_169[6] = 1920;
-	screen_height_169[6] = 1080;
-	screen_width_169[7] = 2048;
-	screen_height_169[7] = 1152;
-	screen_width_169[8] = 2560;
-	screen_height_169[8] = 1440;
-	screen_width_169[9] = 3840;
-	screen_height_169[9] = 2160;
-	//21:9
-	screen_width_219[0] = 2560;
-	screen_height_219[0] = 1080;
-	screen_width_219[1] = 3440;
-	screen_height_219[1] = 1440;
-
 	// cvars for custom settings
-	cvar_set("cl_adsmode", "0");
-	cvar_set("cl_cinematic", "0");
-	cvar_set("nzp_particles", "1");
-	cvar_set("nzp_decals", "1");
+	autocvar(cl_adsmode, 0);
+	autocvar(cl_cinematic, 0);
+	autocvar(nzp_particles, 1);
+	autocvar(nzp_decals, 1);
+	autocvar(vid_ultrawide_limiter, 0);
 
 	// per-channel volume
-	cvar_set("snd_channel1volume", "1");
-	cvar_set("snd_channel2volume", "1");
-	cvar_set("snd_channel3volume", "1");
-	cvar_set("snd_channel4volume", "1");
-	cvar_set("snd_channel5volume", "1");
-	cvar_set("snd_channel6volume", "1");
+	autocvar(snd_channel1volume, 1);
+	autocvar(snd_channel2volume, 1);
+	autocvar(snd_channel3volume, 1);
+	autocvar(snd_channel4volume, 1);
+	autocvar(snd_channel5volume, 1);
+	autocvar(snd_channel6volume, 1);
 
 	// force nearest filtering for hud elements to avoid blur
 	cvar_set("gl_texturemode2d", "gl_nearest");
@@ -178,8 +135,10 @@ noref void(float apiver, string enginename, float enginever) CSQC_Init =
 	cvar_set("cl_showbuildtime", "1");
 
 	// in-game stopwatch
-	registercvar("scr_serverstopwatch", "0");
+	autocvar(scr_serverstopwatch, 0);
 	stopwatch_sec = stopwatch_min = stopwatch_hr = 0;
+	stopwatch_round_sec = stopwatch_round_min = stopwatch_round_hr = 0;
+	stopwatch_round_starttime = time;
 
 	// retrieve custom maps
 	Customs_Get();
@@ -195,13 +154,31 @@ noref void(float apiver, string enginename, float enginever) CSQC_Init =
 	}
 };
 
+//
+// Init_Particles()
+// Spawns a dummy particle for each effect
+// so it loads. (FIXME - is there a better
+// way?)
+//
+void() Init_Particles =
+{
+	for(int i = 0; i < 3; i++) {
+		pointparticles(particleeffectnum(strcat("muzzle.muzzle_pap_part", itos(i))), '0 0 0', '0 0 0', 0);
+		pointparticles(particleeffectnum(strcat("muzzle.muzzle_part", itos(i))), '0 0 0', '0 0 0', 0);
+	}					
+	pointparticles(particleeffectnum("weapons.impact"), '0 0 0', '0 0 0', 0);
+	pointparticles(particleeffectnum("weapons.impact_decal"), '0 0 0', '0 0 0', 0);
+	pointparticles(particleeffectnum("weapons.explode"), '0 0 0', '0 0 0', 0);
+	pointparticles(particleeffectnum("blood.blood_particle"), '0 0 0', '0 0 0', 0);
+}
+
 noref void() CSQC_WorldLoaded =
 {
 	//precache_model("models/weapons/mg/mzl.iqm");
 	//precache_model("models/blood.iqm");
 	
 	if(!player)
-		player = edict_num(player_localnum);
+		player = findfloat(world, entnum, player_localnum);
 	if(!vmodel)
 		vmodel = spawn();
 	if(!v2model)
@@ -218,16 +195,10 @@ noref void() CSQC_WorldLoaded =
 	setmodel(v2model,"");
 	mzlflash.renderflags = vmodel.renderflags;
 	mzlflash.origin = vmodel.origin + vmodel_muzzleoffset;
-	
-	playerpoints[1] = -1;
-	playerpoints[2] = -1;
-	playerpoints[3] = -1;
 
 	Achievement_Init();
-	
-	// Dummy so that our other point particles work!
-	pointparticles(particleeffectnum("weapons.impact_decal"), '0 0 0', '0 0 0', 1);
-	pointparticles(particleeffectnum("muzzle.muzzle_part0"), '0 0 0', '0 0 0', 1);
+	Init_Particles();
+	nameprint_time = time + 12;
 
 	huddir = "gfx/hud/";
 };
@@ -490,10 +461,123 @@ void() Update_Vmodel =
 		mzlflash.alpha = 0.01;
 }
 
+float Player_PreDraw() =
+{
+	self.lerpfrac -= frametime*10;
+	while(self.lerpfrac < 0) {
+		self.frame2 = self.frame;
+		self.lerpfrac += 1;
+	}
+
+    if (self.entnum == player_localentnum) {
+        self.movetype = MOVETYPE_WALK;
+		// Prepare rollback
+		vector vOldOrigin = self.origin;
+		vector vOldVelocity = self.velocity;
+		float fOldPMoveFlags = self.pmove_flags;
+
+		// Apply physics for every single input-frame that has not yet been
+		// acknowledged by the server (servercommandframe = last acknowledged frame)
+		for (int i = servercommandframe + 1; i <= clientcommandframe; i++) {
+		float flSuccess = getinputstate(i);
+
+			if (flSuccess == FALSE) {
+				continue;
+			}
+
+			// Partial frames are the worst
+			if (input_timelength == 0) {
+				break;
+			}
+			runstandardplayerphysics(self);
+		}
+				
+		// Smooth stair stepping, this has to be done manually!
+		playerOriginOld = playerOrigin;
+				
+		if ((self.flags & FL_ONGROUND) && (self.origin_z - playerOriginOld_z > 0)) {
+			playerOriginOld_z += frametime * 150;
+					
+			if (playerOriginOld_z > self.origin_z) {
+				playerOriginOld_z = self.origin_z;
+			}
+			if (self.origin_z - playerOriginOld_z > 18) {
+				playerOriginOld_z = self.origin_z - 18;
+			}
+			playerOrigin_z += playerOriginOld_z - self.origin_z;
+		} else {
+			playerOriginOld_z = self.origin_z;
+		}
+			
+		playerOrigin = [self.origin_x, self.origin_y, playerOriginOld_z];
+		playerVelocity = self.velocity;
+		addentity(self);
+
+		// Time to roll back
+		self.origin = vOldOrigin;
+		setorigin(self, self.origin);
+		self.velocity = vOldVelocity;
+		self.pmove_flags = fOldPMoveFlags;
+		self.movetype = MOVETYPE_NONE;
+
+		// Set renderflag for mirrors!
+		self.renderflags = RF_EXTERNALMODEL;
+    } else {
+        addentity(self);
+    }
+    return PREDRAW_NEXT;
+}
+
 noref void(float isnew) CSQC_Ent_Update =
 {
-	if(isnew)
-		addentity(self);
+	float ent_type = readbyte();
+
+	if (ent_type == 1) {
+		if (isnew == TRUE) {
+			self.classname = "player";
+			self.solid = SOLID_SLIDEBOX;
+			self.predraw = Player_PreDraw;
+			self.drawmask = MASK_ENGINE;
+			setmodel(self, "models/player.mdl");
+		}
+
+		float old_points = self.points;
+			
+		self.origin_x = readcoord();
+		self.origin_y = readcoord();
+		self.origin_z = readcoord();
+		self.angles_x = readangle();
+		self.angles_y = readangle();
+		self.angles_z = readangle();
+		self.velocity_x = readshort();
+		self.velocity_y = readshort();
+		self.velocity_z = readshort();
+		self.playernum = readbyte();
+		self.modelindex = readshort();
+		self.frame = readbyte();
+		self.movetype = readshort();
+		self.flags = readshort();
+		self.stance = readbyte();
+		self.points = readfloat();	// FIXME: this should be made a short, but I know we use price of 1 for some test maps, so I can't do /10 *10 shenanigans.
+		self.kills = readshort();
+
+		RegisterPointChange(self.points - old_points, self.playernum);
+
+		if (self.movetype == MOVETYPE_BOUNCE)
+			self.solid = SOLID_NOT;
+		else
+			self.solid = SOLID_SLIDEBOX;
+			
+		setmodelindex(self, self.modelindex);
+		if (self.stance == 2)
+			setsize(self, PLAYER_MINS_STANDING, PLAYER_MAXS_STANDING);
+		else
+			setsize(self, PLAYER_MINS_CROUCHING, PLAYER_MAXS_CROUCHING);
+
+	} else {
+		if(isnew)
+			addentity(self);
+	}
 }
 
 float(__inout vector v) VectorNormalize =
@@ -528,6 +612,191 @@ void() DropRecoilKick =
 	gun_kick[1] *= len;
 	gun_kick[2] *= len;
 }
+
+string() LoadScreen_GiveTip =
+{
+	float index = rint((random() * (80 - 1))) + 1;
+
+	switch(index)
+    {
+        case 1:
+			return  "Released in 1996, Quake is over 25 years old!";
+        case 2:
+            return  "Use the Kar98k to be the hero we need!";
+        case 3:
+            return  "Lots of modern engines are based on Quake!";
+        case 4:
+            return  "NZ:P began development on September 27 2009!";
+        case 5:
+            return  "NZ:P was first released on December 25, 2010!";
+        case 6:
+            return  "NZ:P Beta 1.1 has over 300,000 downloads!";
+        case 7:
+            return  "NZ:P has been downloaded over 500,000 times!";
+        case 8:
+            return  "A lot of people have worked on NZ:P!";
+        case 9:
+            return  "Blubswillrule, or \"blubs\", is from the US.";
+        case 10:
+            return  "Jukki is from Finland.";
+        case 11:
+            return  "Ju[s]tice, or \"tom\" is from Lithuania.";
+        case 12:
+            return  "This game has given us bad sleeping habits!";
+        case 13:
+            return  "We had a lot of fun making this game!";
+        case 14:
+            return  "Pro Tip: you can make your own custom map!";
+        case 15:
+            return  "Try Retro Mode, it's in the Graphics Settings!";
+        case 16:
+			return  "Tired of our maps? Go make your own!";
+        case 17:
+            return  "Slay zombies & be grateful.";
+        case 18:
+            return  "Custom maps, CUSTOM MAPS!";
+        case 19:
+            return  "Go outside & build a snowman!";
+        case 20:
+            return  "Please surround yourself with zombies!";
+        case 21:
+            return  "Don't play for too long.. zombies may eat you.";
+        case 22:
+            return  "That was epic... EPIC FOR THE WIIIN!"; //why
+        case 23:
+            return  "FTEQW is an awesome Quake Engine!";
+        case 24:
+            return  "You dead yet?";
+        case 25:
+            return  "Now 21% cooler!";
+        case 26:
+            return  "your lg is nothink on the lan!"; //what
+        case 27:
+            return  "I'm not your chaotic on dm6!"; 
+        case 28:
+            return  "Shoot or knife zombies to kill them, up to you!";
+        case 29:
+            return 	"How many people forgot to Compile today?";
+        case 30:
+            return  "ggnore";
+        case 31:
+			return  "NZ:P is also on PC, Switch, Vita, and PSP!";
+        case 32:
+            return  "Submerge your device in water for godmode!";
+        case 33:
+            return  "10/10/10 was a good day.";
+        case 34:
+            return  "Also check out \"FreeCS\" by eukara!";
+        case 35:
+            return 	"CypressImplex, or \"Ivy\", is from the USA.";
+        case 36:
+            return  "Zombies don't like bullets.";
+        case 37:
+            return  "Thanks for being an awesome fan!";
+		case 38:
+			return 	"Removed Herobrine";
+		case 39:
+			return 	"Pack-a-Punch the Kar98k to get to round 100000.";
+		case 40:
+			return 	"I feel like I'm being gaslit.";
+		case 41:
+			return 	"Heads up! You will die if you are killed!";
+		case 42:
+			return 	"Zombies legally can't kill you if you say no!";
+		case 43:
+			return 	"Please help me find the meaning of   . Thanks.";
+		case 44:
+			return  "Discord is ONLY for Thomas the Tank Engine RP!";
+		case 45:
+			return 	"\"Get rid of the 21% tip, it's an MLP reference.\"";
+		case 46:
+			return 	"You're playing on FTE!";
+		case 47:
+			return 	"Don't leak the beta!";
+		case 48:
+			return  "Jugger-Nog increases your health!";
+		case 49:
+			return  "greg was here";
+		case 50:
+			return  "Where the hell is the Mystery Box?!";
+		case 51:
+			return  "Zombies like getting shot.. I think.";
+		case 52:
+			return  "pro tip: aiming helps";
+		case 53:
+			return  "\"my mom gave me plunger money\"";
+		case 54:
+			return "dolphin dive on top of your friend for god mode";
+		case 55:
+			return "no free rides. ass, grass, or cash!";
+		case 56:
+			return "https://nzp.gay/";
+		case 57:
+			return "im an mlg gamer girl so its pretty guaranteed";
+		case 58:
+			return "this is a w because you cant have enough fnaf";
+		case 59:
+			return "i hope santa drops bombs on the uk";
+		case 60:
+			return "Hoyl shit, bro! You fucking ported fortnite!";
+		case 61:
+			return "icarly feet futtishist.";
+		case 62:
+			return "Well, it's impossible to play, I'm disgusted.";
+		case 63:
+			return "I like my women to not be cartoons";
+		case 64:
+			return "Plot twist: NZP was always broken";
+		case 65:
+			return "testing some think.";
+		case 66:
+			return "fnaf is older than gay marriage in the us";
+		case 67:
+			return "i want that twink Obliterated";
+		case 68:
+			return "i think he started the femboy transition process";
+		case 69:
+			return "nice";
+		case 70:
+			return "He's FUCKING annoying";
+		case 71:
+			return "yeah pog female bikers";
+		case 72:
+			return "Its either a stroke of genius or just a stroke";
+		case 73:
+			return  "Play some Custom Maps!";
+		case 74:
+			return  "Real OGs play on Win9X Machines!";
+		case 75:
+			return  "Adding this tip improved framerate by 39%!";
+		case 76:
+			return  "The NZ in NZP stands for New Zealand!";
+		case 77:
+			return  "The P in NZP stands for Professional!";
+		case 78:
+			return  "Remember to stay hydrated!";
+		case 79:
+			return  "cofe";
+    }
+    return "wut wut";
+};
+
+noref void(float width, float height, float notmenu) CSQC_UpdateViewLoading =
+{
+	if (loadscreen_mapname != "") {
+		drawpic([0, 0], strcat("gfx/lscreen/", loadscreen_mapname), [width, height], [1, 1, 1], 1);
+	}
+
+	drawfill ([0, 0], [width, 32, 1], [0, 0, 0], 0.68, 0);
+	drawfill ([0, height - 32], [width, 32, 1], [0, 0, 0], 0.68, 0);
+
+	drawstring([width/2 - (stringwidth(loadscreen_tip, 0, [12, 12])/2), height - 16, 0], loadscreen_tip, [12, 12], [1, 1, 1], 1, 0);
+	drawstring([6, 6], loadscreen_maptitle, [24, 24], TEXT_ORANGE, 1, 0);
+
+	drawfill ([width/2 - 160, height - 42], [320, 18, 1], [0.27, 0.27, 0.27], 1, 0);
+	drawfill ([width/2 - 164, height - 46], [328, 26, 1], [0, 0, 0], 0.77, 0);
+	drawstring([width/2 - (stringwidth("Loading...", 0, [14, 14])/2), height - 40, 0], "Loading...", [14, 14], [1, 1, 1], 1, 0);
+};
 
 #define SCALE_CONSTANT 		8
 
@@ -565,8 +834,26 @@ noref void(float width, float height, float menushown) CSQC_UpdateView =
 		stopwatch_min = 0;
 	}
 
+	if (stopwatch_round_isactive) {
+		stopwatch_round_sec = (time - stopwatch_round_starttime) - (stopwatch_round_min * 60 + (stopwatch_round_hr * 3600));
+
+		if (stopwatch_round_sec >= 60) {
+			stopwatch_round_min += stopwatch_round_sec/60;
+		}
+
+		if (stopwatch_round_min >= 60) {
+			stopwatch_round_hr += stopwatch_round_min/60;
+			stopwatch_round_min = 0;
+		}
+	} else {
+		stopwatch_round_starttime = time;
+	}
+
 	//autoadd entities received from servers for drawing	
 	addentities(MASK_ENGINE);
+
+	setproperty(VF_ORIGIN, playerOrigin + [ 0, 0, getstatf(STAT_VIEWHEIGHT)]);
+	//setproperty(VF_ANGLES, view_angles);
 
 	//do viewmodel manipulation, purely cosmetic stuff
 	if(vmodel)
@@ -691,6 +978,11 @@ noref void(float width, float height, float menushown) CSQC_UpdateView =
 	//does what you think it does
 	renderscene();
 
+	if (in_loadscreen)
+	{
+		in_loadscreen = false;
+		localcmd(strcat("map ", loadscreen_mapname, "\n"));
+	}
 	if(in_menu)
 	{
 		//in menu.qc
@@ -699,11 +991,7 @@ noref void(float width, float height, float menushown) CSQC_UpdateView =
 	else
 	{
 		HUD_Draw(g_width, g_height);
-	}
-	if(serverkey("constate") != "active" && serverkey("disconnected"))
-	{
-		drawfill('0 0 0',  [width, height, 0], '0.2 0.4 0.7', 1, 0);
-		drawstring([width/2 - 60, height/2, 0], "Loading...", [16,16,0],[1,1,1],1,0);
+		Chat_Draw();
 	}
 };
 
@@ -810,6 +1098,64 @@ noref float(float evtype, float scanx, float chary, float devid) CSQC_InputEvent
 					}
 				}
 
+				if (in_menu == MENU_MULTI) {
+					// GO AWAY!
+					if (scanx == K_ENTER || scanx == K_ESCAPE) {
+						editing_player_name = editing_server_id = editing_password = editing_hostname = false;
+						return FALSE;
+					}
+
+					if (editing_player_name == true) {
+						// Update the temp string.
+						temp_player_name = GetUserInput(temp_player_name, scanx, chary, 18);
+
+						// Always append.
+						cvar_set("name", temp_player_name);
+
+						// No, I don't want to read binds. Thanks.
+						return TRUE;
+					}
+				} else if (in_menu == MENU_CREATE || in_menu == MENU_JOIN) {
+					// GO AWAY!
+					if (scanx == K_ENTER || scanx == K_ESCAPE) {
+						editing_player_name = editing_server_id = editing_password = false;
+						return FALSE;
+					}
+
+					// Server IP
+					if (editing_server_id == true) {
+						// Update the temp string.
+						temp_server_name = GetUserInput(temp_server_name, scanx, chary, 18);
+
+						// No, I don't want to read binds. Thanks.
+						return TRUE;
+					}
+
+					// Password
+					if (editing_password == true) {
+						// Update the temp string.
+						temp_password = GetUserInput(temp_password, scanx, chary, 18);
+
+						// Always append.
+						cvar_set("password", temp_password);
+
+						// No, I don't want to read binds. Thanks.
+						return TRUE;
+					}
+
+					// Hostname
+					if (editing_hostname == true) {
+						// Update the temp string.
+						temp_hostname = GetUserInput(temp_hostname, scanx, chary, 18);
+
+						// Always append.
+						cvar_set("hostname", temp_hostname);
+
+						// No, I don't want to read binds. Thanks.
+						return TRUE;
+					}
+				}
+
 				// Controller Menu Navigation
 				if (scanx == K_JOY2) {
 					GPActive[0] = TRUE;
@@ -863,71 +1209,10 @@ noref float(float evtype, float scanx, float chary, float devid) CSQC_InputEvent
 
 noref void() CSQC_Input_Frame =
 {
-	if(walk)
-	{
-		input_movevalues *= 0.5;
-	}
-
-	input_angles = getproperty(VF_ANGLES);
+	input_angles += gun_kick;
 }
 
-float() tracerthink =
-{
-	//makevectors(self.angles);
-	local vector cross1 = normalize(crossproduct( getviewprop(VF_ORIGIN) - self.targetpos, self.targetpos - self.origin));
-	local vector cross2 = normalize(crossproduct( getviewprop(VF_ORIGIN) - self.origin, self.targetpos - self.origin));
-	R_BeginPolygon("tracers/mg");
-	
-	R_PolygonVertex(self.origin + cross2, '0 1 0', '1 1 1', self.alpha - 0.6);
-	R_PolygonVertex(self.origin - cross2, '0 0 0', '1 1 1', self.alpha - 0.6);
-	R_PolygonVertex(self.targetpos - cross1, '1 0 0', '1 1 1', self.alpha);
-
-	R_PolygonVertex(self.targetpos + cross1, '1 1 0', '1 1 1', self.alpha);
-	R_PolygonVertex(self.origin + cross2, '0 1 0', '1 1 1', self.alpha - 0.6);
-	R_PolygonVertex(self.targetpos - cross1, '1 0 0', '1 1 1', self.alpha);
-
-	/*R_PolygonVertex(self.origin + v_right, '0 1 0', '1 1 1', self.alpha - 0.4);
-	R_PolygonVertex(self.origin - v_right, '0 0 0', '1 1 1', self.alpha - 0.4);
-	R_PolygonVertex(self.targetpos - v_right, '1 0 0', '1 1 1', self.alpha);
-
-	R_PolygonVertex(self.targetpos + v_right, '1 1 0', '1 1 1', self.alpha);
-	R_PolygonVertex(self.origin + v_right, '0 1 0', '1 1 1', self.alpha - 0.4);
-	R_PolygonVertex(self.targetpos - v_right, '1 0 0', '1 1 1', self.alpha);*/
-
-
-	R_EndPolygon();
-
-	self.alpha -= (frametime * self.rate);
-	if(self.alpha <= 0)
-		remove(self);
-
-	return 0;
-}
-
-float() alphafade =
-{
-	
-	self.alpha -= (frametime * 3);
-	self.scale += (frametime * 9);
-	if(self.alpha <= 0.05)
-		remove(self);
-	
-	local vector cross1 = 10 * self.scale * normalize(crossproduct( getviewprop(VF_ORIGIN) - self.origin + self.targetpos * self.scale, self.targetpos * self.scale));
-	local vector cross2 = 10 * self.scale * normalize(crossproduct( getviewprop(VF_ORIGIN) - self.origin, self.targetpos * self.scale));
-	R_BeginPolygon("bloodsplat2");
-	
-	R_PolygonVertex(self.origin + cross2, '0 1 0', '1 1 1', self.alpha);
-	R_PolygonVertex(self.origin - cross2, '0 0 0', '1 1 1', self.alpha);
-	R_PolygonVertex(self.origin + (self.targetpos*self.scale*18) - cross1, '1 0 0', '1 1 1', self.alpha);
-
-	R_PolygonVertex(self.origin + (self.targetpos*self.scale*18) + cross1, '1 1 0', '1 1 1', self.alpha);
-	R_PolygonVertex(self.origin + cross2, '0 1 0', '1 1 1', self.alpha);
-	R_PolygonVertex(self.origin + (self.targetpos*self.scale*18) - cross1, '1 0 0', '1 1 1', self.alpha);
-	
-	R_EndPolygon();
-	
-	return 0;
-}
+#define DEG2RAD(x)	(x * M_PI / 180.f)
 
 noref void() CSQC_Parse_Event =
 {
@@ -950,28 +1235,37 @@ noref void() CSQC_Parse_Event =
 
 			if(entnum == player_localentnum)
 			{
-				makevectors(view_angles);
+				// originally was view_angles, but thats only what is reported
+				// to the server, weapon kick is NOT reported, so offset continued
+				// to grow.
+				getinputstate(servercommandframe);
+				makevectors(input_angles);
 				local vector offset = vmodel.origin + vmodel_muzzleoffset;
-				local vector muzzlepos;
+				local vector muzzlepos, muzzle_offset;
 				muzzlepos = getviewprop(VF_ORIGIN);
 				
-				local vector muzzle_offset = GetWeaponFlash_Offset(getstatf(STAT_ACTIVEWEAPON))/1000;
+				muzzle_offset = GetWeaponFlash_Offset(getstatf(STAT_ACTIVEWEAPON))/1000;
+
+				// Firing from the left? Use the other position instead
+                if (side == 0 && IsDualWeapon(getstatf(STAT_ACTIVEWEAPON)))
+					muzzle_offset = WepDef_GetLeftFlashOffset(getstatf(STAT_ACTIVEWEAPON))/1000;
 
 				// ADS offset
-				if(getstatf(STAT_WEAPONZOOM) == 1)
-				{  
-					muzzle_offset += GetWeaponADSPos(weapon);
-					muzzle_offset[0] -= 2;
+				if(getstatf(STAT_WEAPONZOOM) == 1) {  
+					muzzle_offset += GetWeaponADSOfs_PSP(weapon)/1000;
 				}
-                
-                // Firing from the left? Flip x-axis for muzzleflash
-                if (side == 0 && IsDualWeapon(getstatf(STAT_ACTIVEWEAPON)))
-                    muzzle_offset[0] = -muzzle_offset[0];
 				
 				muzzlepos += v_forward * muzzle_offset_z;
 				muzzlepos += v_right * muzzle_offset_x;
 				muzzlepos += v_up * muzzle_offset_y;			
 				mzlflash.alpha = 1;
+
+				// Scale the muzzleflash to meet viewmodel FOV
+				// FTE doesnt support vector scaling :(
+				// float afov = cvar("fov");
+				// float vfov = cvar("r_viewmodel_default_fov");
+				// float ascale = 1.0 / tan(DEG2RAD(afov/2.0)) * vfov / 90.0;
+				// mzlflash.scale = ascale;
 
 				if (cvar("nzp_particles") && cvar("r_drawviewmodel")) {
 					float index = rint(random() * 2);
@@ -981,27 +1275,17 @@ noref void() CSQC_Parse_Event =
 						pointparticles(particleeffectnum(strcat("muzzle.muzzle_part", ftos(index))), muzzlepos, norm*24, 1);
 				}
 			}
+
+			if (GetFiretype(getstatf(STAT_ACTIVEWEAPON)) == FIRETYPE_GRENADE)
+				return;
 			
-			if(traceent == 0 && GetFiretype(getstatf(STAT_ACTIVEWEAPON)) != 3)
+			if(traceent == 0)
 			{
 				if (cvar("nzp_particles"))
 					pointparticles(particleeffectnum("weapons.impact"), pos, norm*24, 1);
 
 				if (cvar("nzp_decals"))
 					pointparticles(particleeffectnum("weapons.impact_decal"), pos, '0 0 0', 1);
-			}
-			else
-			{
-				local vector entorg;
-				entorg = getentity(traceent, GE_ORIGIN);
-				norm = (norm * 0.25) + (normalize(pos - (entorg + '0 0 12')) * 0.75);
-				local entity splat = spawn();
-				splat.drawmask = 1;
-				splat.alpha = 1;
-				splat.scale = 0.05;
-				splat.angles = [random()*360, random()*360, random()*360];
-				splat.targetpos = norm * 1.5;
-				splat.predraw = alphafade;
 			}
 			break;
 		case EVENT_WEAPONRECOIL:
@@ -1022,7 +1306,7 @@ noref void() CSQC_Parse_Event =
             	pointparticles(particleeffectnum("weapons.explode"), org, '0 0 0', 1);
             break;
 		case EVENT_BLOOD:
-			local vector loc;
+			vector loc;
 
 			loc_x = readcoord();
             loc_y = readcoord();
@@ -1030,6 +1314,35 @@ noref void() CSQC_Parse_Event =
 			
 			if (cvar("nzp_particles"))
 				pointparticles(particleeffectnum("blood.blood_particle"), loc, '0 0 0', 1);
+			break;
+		case EVENT_FLAME:
+			vector floc;
+
+			floc_x = readcoord();
+            floc_y = readcoord();
+            floc_z = readcoord();
+			
+			if (cvar("nzp_particles")) {
+				pointparticles(particleeffectnum("flames.flame_particle"), floc, '0 0 0', 1);
+			}
+			break;
+		case EVENT_LIMBGIB:
+			vector gloc;
+
+			gloc_x = readcoord();
+            gloc_y = readcoord();
+            gloc_z = readcoord();
+			
+			if (cvar("nzp_particles")) {
+				pointparticles(particleeffectnum("blood.blood_particle"), gloc, '0 0 0', 1);
+				pointparticles(particleeffectnum("blood.gibs"), gloc, '0 0 0', 1);
+			}
+			break;
+		case EVENT_CHATMESSAGE:
+			int sender = readbyte();
+			int player_id = readbyte();
+			string message = readstring();
+			Chat_Register(sender, player_id, message);
 			break;
 		case EVENT_WEAPONCHANGE:
 			local float to;
@@ -1071,7 +1384,9 @@ noref void() CSQC_Parse_Event =
 
 			useprint_time = time + 0.1;
 			break;
-			
+		case EVENT_ENDGAME:
+			game_over = true;
+			break;
 		case EVENT_NEWROUND:
 			rounds = readbyte();
 			HUD_Change_time = time + 6;
@@ -1085,6 +1400,9 @@ noref void() CSQC_Parse_Event =
 			newperks = readlong();
 
 			UpdatePerks(newperks);
+			break;
+		case EVENT_DOUBLETAPUPDATE:
+			double_tap_version = readbyte();
 			break;
 		case EVENT_UPDATE:
 			float updatetype = readbyte();
@@ -1143,20 +1461,20 @@ noref void() CSQC_Parse_Event =
 			revive_icons[reviveoff_id].draw = false;
 			active_revive_icons--;
 			break;
-		case EVENT_POINTUPDATE:
-			float playernum = readbyte();
-			float temppoints = readlong();
-			RegisterPointChange(readlong(), playernum);
-			float tempkills = readlong();
-			string tempname = readstring();
+		// case EVENT_POINTUPDATE:
+		// 	float playernum = readbyte();
+		// 	float temppoints = readlong();
+		// 	RegisterPointChange(readlong(), playernum);
+		// 	float tempkills = readlong();
+		// 	string tempname = readstring();
 			
-			switch(playernum) {
-				case 1: playerpoints[0] = temppoints; playerkills[0] = tempkills; playernames[0] = tempname; break;
-				case 2: playerpoints[1] = temppoints; playerkills[1] = tempkills; playernames[1] = tempname;  break;
-				case 3: playerpoints[2] = temppoints; playerkills[2] = tempkills; playernames[2] = tempname; break;
-				case 4: playerpoints[3] = temppoints; playerkills[3] = tempkills; playernames[3] = tempname; break;		
-			}
-			break;
+		// 	switch(playernum) {
+		// 		case 1: playerpoints[0] = temppoints; playerkills[0] = tempkills; playernames[0] = tempname; break;
+		// 		case 2: playerpoints[1] = temppoints; playerkills[1] = tempkills; playernames[1] = tempname;  break;
+		// 		case 3: playerpoints[2] = temppoints; playerkills[2] = tempkills; playernames[2] = tempname; break;
+		// 		case 4: playerpoints[3] = temppoints; playerkills[3] = tempkills; playernames[3] = tempname; break;		
+		// 	}
+		// 	break;
 		case EVENT_BLACKOUT:
 			fade_time = readbyte();
 			fade_type = readbyte();
@@ -1202,6 +1520,12 @@ noref void() CSQC_Parse_Event =
 			break;
 		case EVENT_PLAYERUPDATE:
 			player_count = readbyte();
+			break;
+		case EVENT_GRENADEPULSE:
+			crosshair_pulse_grenade = true;
+			break;
+		case EVENT_BETTYPROMPT:
+			bettyprompt_time = time + 4;
 			break;
 		case EVENT_WEAPONUPDATE:
 			float wepnum = readbyte();

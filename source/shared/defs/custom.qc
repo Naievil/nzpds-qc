@@ -55,11 +55,27 @@ const float EVENT_REVIVEOFF 			= 38;
 const float EVENT_REVIVECHANGE 			= 39;
 const float EVENT_WEAPONRECOIL 			= 40;
 const float EVENT_SONGPLAY 				= 41;
+const float EVENT_GRENADEPULSE 			= 42;
+const float EVENT_BETTYPROMPT 			= 43;
+const float EVENT_LIMBGIB				= 44;
+const float EVENT_CHATMESSAGE			= 45;
+const float EVENT_DOUBLETAPUPDATE 		= 46;
+const float EVENT_FLAME 				= 47;
+const float EVENT_ENDGAME				= 48;
 
 // Define our FTE platform
 #ifndef STANDARD
 #define FTE
 #endif // STANDARD
+
+// Player Hull Sizes
+// 32x32x72
+#define PLAYER_MINS_STANDING 	'-16 -16 -32'
+#define PLAYER_MAXS_STANDING 	'16 16 40'
+
+// 32x32x36
+#define PLAYER_MINS_CROUCHING	'-16 -16 -32'
+#define PLAYER_MAXS_CROUCHING 	'16 16 4'
 
 // Weapon Firetype definitions
 #define FIRETYPE_FULLAUTO	0
@@ -125,7 +141,7 @@ const float EVENT_SONGPLAY 				= 41;
 #define W_LONGINUS     50 //panzer
 #define W_PENETRATOR   51 //ptrs
 #define W_WIDOW        52 //bar
-//#define W_KRAUS      53 //ballistic
+#define W_KRAUS        53 //ballistic
 #define W_MP5K         54
 #define W_M14          55
 
@@ -182,6 +198,8 @@ const float EVENT_SONGPLAY 				= 41;
 #define REVIVE		10
 #define RELOAD_EMP 	11
 #define RELOAD_PAR 	12
+#define PUTOUT 		13
+#define TAKEOUT 	14
 
 #define S_HEADSHOT	1
 #define S_KNIFE		2
@@ -221,6 +239,10 @@ const float EVENT_SONGPLAY 				= 41;
 #define STAT_PLAYERSTANCE 		65
 #define STAT_FACINGENEMY 		66
 #define STAT_MAXHEALTH 			67
+#define STAT_PLAYERNAME 		68
+
+.float playernum;
+float game_over;
 
 //
 // invert float takes in float value between 0 and 1, inverts position

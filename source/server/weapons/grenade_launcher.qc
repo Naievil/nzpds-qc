@@ -39,7 +39,7 @@ void(float side) W_FireGrenade =
 	nade.owner = self;
 	nade.movetype = MOVETYPE_BOUNCE;
 	nade.solid = SOLID_BBOX;
-	nade.classname = "explosiveNade";
+	nade.classname = "projectile_grenade";
 
 	makevectors (self.v_angle);
 
@@ -51,4 +51,21 @@ void(float side) W_FireGrenade =
 	nade.origin = self.origin + self.view_ofs;
 
 	setorigin(nade, nade.origin);
+
+#ifdef FTE
+
+	WriteByte(MSG_MULTICAST, SVC_CGAMEPACKET);
+	WriteByte(MSG_MULTICAST, EVENT_PISTOLFIRE);
+	WriteEntity(MSG_MULTICAST, self);
+    WriteFloat(MSG_MULTICAST, side);
+	WriteCoord(MSG_MULTICAST, 0);
+	WriteCoord(MSG_MULTICAST, 0);
+	WriteCoord(MSG_MULTICAST, 0);
+	WriteCoord(MSG_MULTICAST, 0);
+	WriteCoord(MSG_MULTICAST, 0);
+	WriteCoord(MSG_MULTICAST, 0);
+	WriteEntity(MSG_MULTICAST, world);
+	multicast(self.origin, MULTICAST_PHS);
+
+#endif // FTE
 }

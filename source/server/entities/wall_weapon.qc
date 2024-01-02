@@ -26,6 +26,8 @@
 
 */
 
+void() W_PlayTakeOut;
+
 // =================================
 // Wall Chalk Functionality
 // =================================
@@ -92,7 +94,7 @@ void() weapon_wall =
 
 	// We are, indeed, Wall Chalk.
 	Precache_Set("models/misc/chalk.mdl");	
-	setsize (self, VEC_HULL2_MIN, VEC_HULL2_MAX);
+	setsize (self, '-12 -12 -12', '12 12 12');
 
 	// Set-Up Weapon Prop.
 	entity weapon_prop = spawn();
@@ -102,11 +104,16 @@ void() weapon_wall =
 	self.enemy.solid = SOLID_NOT;
 	self.enemy.owner = self;
 	self.enemy.classname = "weapon_wall_prop";
-	setsize(self.enemy, VEC_HULL2_MIN, VEC_HULL2_MAX);
+	setsize(self.enemy, '0 0 0', '0 0 0');
 
 	// We want the Prop to be slightly behind the Chalk.
 	makevectors(self.angles);
 	setorigin(self.enemy, self.origin + v_right*-4);
+
+	// Backwards compatibility for betties brokenly using
+	// cost2.
+	if (self.cost == 0 && self.weapon == W_BETTY)
+		self.cost = self.cost2;
 
 	// Prep it for usage.
 	self.skin = 0;
@@ -128,11 +135,10 @@ void() weapon_wall =
 void () WallWeapon_TouchTrigger =
 {
 	entity oldent;
-	float tempf, tempf1, tempf2, tempf3;
 
 	float wcost;
 
-	if (other.classname != "player" || other.downed || other.isBuying) {
+	if (other.classname != "player" || other.downed || other.isBuying || !PlayerIsLooking(other, self)) {
 		return;
 	}
 
@@ -223,6 +229,8 @@ void () WallWeapon_TouchTrigger =
 				return;
 			}
 
+			other.semiuse = true;
+
 			// Player doesn't have enough points. Abort.
 			if (other.points < wcost) {
 				centerprint(other, STR_NOTENOUGHPOINTS);
@@ -230,7 +238,7 @@ void () WallWeapon_TouchTrigger =
 				return;
 			}
 
-			other.currentammo = getWeaponAmmo(other.weapon);
+			other.weapons[0].weapon_reserve = getWeaponAmmo(other.weapon);
 
 			sound(other, 0, "sounds/misc/ching.wav", 1, 1);
 			other.reload_delay = 0;
@@ -248,10 +256,12 @@ void () WallWeapon_TouchTrigger =
 	}
 	if (self.weapon == W_BETTY)
 	{
-		if (other.secondary_grenades < 2)
-			useprint (other, 3, self.cost2, self.weapon);
-		else
+		// Betties are a one-time purchase.
+		if (other.grenades & 2)
 			return;
+
+		useprint (other, 4, self.cost, self.weapon);
+
 		if (!other.button7 || other.semiuse)
 			return;
 		if (other.points < self.cost2)
@@ -269,6 +279,7 @@ void () WallWeapon_TouchTrigger =
 			addmoney(other, 0 - self.cost2, FALSE);
 			other.grenades = other.grenades | 2;
 			other.secondary_grenades = 2;
+			nzp_bettyprompt(other);
 			if (self.enemy)
 			{
 				oldent = self;
@@ -324,12 +335,21 @@ void () WallWeapon_TouchTrigger =
 					sound(other, 0, "sounds/misc/denybuy.wav", 1, 1);
 					return;
 				} else {
+					W_HideCrosshair(other);
 					addmoney(other, -self.cost2, FALSE);
+					sound(other, 0, "sounds/misc/ching.wav", 1, 1);
 					other.ach_tracker_coll++;
+					if (self.enemy)
+					{
+						oldent = self;
+						self = self.enemy;
+						self.use();
+						self = oldent;
+					}
 					entity tempz;
 					tempz = self;
 					self = other;
-					Set_W_Frame(15, 30, 0, 0, 0, ReturnWeaponModel, "models/weapons/knife/v_bowie.mdl", false, S_BOTH);
+					Set_W_Frame(15, 30, 2.75, 0, 0, W_PlayTakeOut, "models/weapons/knife/v_bowie.mdl", false, S_BOTH);
 					self.bowie = 1;
 				}
 			}
@@ -356,47 +376,6 @@ void () WallWeapon_TouchTrigger =
 		other.semiuse = true;
 		other.ach_tracker_coll++;
 
-		if (other.weapon && !other.secondaryweapon) {
-			tempf = other.currentammo;
-			other.currentammo = other.secondaryammo;
-			other.secondaryammo = tempf;
-
-			tempf1 = other.currentmag;
-			other.currentmag = other.secondarymag;
-			other.secondarymag = tempf1;
-
-			tempf2 = other.weapon;
-			other.weapon = other.secondaryweapon;
-			other.secondaryweapon = tempf2;
-
-			tempf3 = other.currentmag2;
-			other.currentmag2 = other.secondarymag2;
-			other.secondarymag2 = tempf3;
-		} else if (other.weapon && other.secondaryweapon) {
-			if ((other.perks & P_MULE) && !other.thirdweapon) {
-				// store secondary weapon
-				tempf = other.secondaryweapon;
-				tempf1 = other.secondarymag;
-				tempf2 = other.secondaryammo;
-				tempf3 = other.secondarymag2;
-				// move primary to secondary
-				other.secondaryweapon = other.weapon;
-				other.secondarymag = other.currentmag;
-				other.secondarymag2 = other.currentmag2;
-				other.secondaryammo = other.currentammo;
-				// move secondary to tertiary
-				other.thirdweapon = tempf;
-				other.thirdmag = tempf1;
-				other.thirdammo = tempf2;
-				other.thirdmag2 = tempf3;
-			}
-
-			// free current slot
-			other.currentammo = 0;
-			other.currentmag = 0;
-			other.weapon = 0;
-		}
-
 		sound(other, 0, "sounds/misc/ching.wav", 1, 1);
 		other.reload_delay = 0;
 		addmoney(other, -1*self.cost, 0);
@@ -406,27 +385,10 @@ void () WallWeapon_TouchTrigger =
 			self.use();
 			self = oldent;
 		}
-		other.weapon = self.weapon;
-
-		other.currentammo = getWeaponAmmo(self.weapon);
-		other.currentmag = getWeaponMag(self.weapon);
 		tempe = self;
 		self = other;
 
-		SwitchWeapon(self.weapon);
-
-		if (GetFrame(self.weapon, FIRST_TAKE_START) != 0)
-			Weapon_PlayViewModelAnimation(ANIM_FIRST_TAKE, SUB_Null, 0);
-		else
-			Weapon_PlayViewModelAnimation(ANIM_TAKE_OUT, SUB_Null, 0);
-
-#ifndef FTE
-
-		self.Flash_Offset = GetWeaponFlash_Offset(self.weapon);
-		self.Flash_Size = GetWeaponFlash_Size(self.weapon);
-		self.Weapon_Name = GetWeaponName(self.weapon);
-
-#endif // FTE
+		Weapon_GiveWeapon(tempe.weapon, 0, 0);
 
 		self = tempe;
 	}
@@ -447,8 +409,15 @@ void() WallWeapon_LinkChalk =
 	
 	ent = find (world, targetname, self.target);
 	
-	if (ent.classname == "weapon_wall")
-	    self.enemy = ent;
+	if (ent.classname == "weapon_wall") {
+		self.enemy = ent;
+		self.mins = self.enemy.mins;
+		self.maxs = self.enemy.maxs;
+		self.origin = self.enemy.origin;
+		setsize(self, self.mins, self.maxs);
+		setorigin(self, self.origin);
+	}
+	    
 }
 
 //

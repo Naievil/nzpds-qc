@@ -310,6 +310,9 @@ void() PU_NukeKill =
 	// play explosion effects
 	PU_NukeExplode(self.origin + '0 0 13');
 
+	// set them on fire
+	self.onfire = true;
+
 	// kill a target
 	self.th_die();
 
@@ -377,38 +380,133 @@ void() PU_DoublePoints =
 };
 
 //
+// PU_CarpenterFinalize
+// Remove the Carpenter Watcher and
+// rewards Players with Score.
+//
+void() PU_CarpenterFinalize =
+{
+	entity players = find(world, classname, "player");
+
+	// Reward Players with Points
+	while(players) {
+		addmoney(players, 200, 1);
+
+		players = find(players, classname, "player");
+	}
+
+	entity windows = find(world, classname, "window");
+
+	// Reset all windows
+	while(windows) {
+		windows.isspec = 0;
+		windows.box1owner = world;
+		windows.usedent = world;
+		windows.owner = world;
+		windows.ads_release = 0;
+
+		windows = find(windows, classname, "window");
+	}
+
+	carp_powerup_active = false;
+
+	// Free ourselves
+	PU_FreeEnt(self);
+};
+
+//
+// PU_CarpenterFindWindow
+// Finds a Barricade elligible for Repair
+//
+entity() PU_CarpenterFindWindow =
+{
+	entity windows = find(world, classname, "window");
+
+	while(windows != world) {
+		// Window needs repaired and is repairable
+		if (windows.health < 6 && windows.health != -10 && !windows.isspec
+		&& !windows.ads_release)
+			return windows;
+
+		windows = find(windows, classname, "window");
+	}
+
+	// No Windows are elligible, return world.
+	return world;
+};
+
+//
+// PU_CarpenterRepair()
+// Attempts to Repair a Barricade
+//
+void() PU_CarpenterRepair =
+{
+	// Find a new Barricade to Repair
+	if (self.goaldummy == world || self.goaldummy.isspec == 0) {
+
+		if (self.goaldummy != world)
+			self.goaldummy.owner = world;
+
+		self.goaldummy = PU_CarpenterFindWindow();
+		self.kills = false;
+
+		// Didn't find one, so end the Carpenter sequence.
+		if (self.goaldummy == world) {
+			self.think = PU_CarpenterFinalize;
+			self.nextthink = time + 0.1;
+			return;
+		}
+
+		// Mark the window as being Repaired
+		self.goaldummy.isspec = 1;
+		self.goaldummy.ads_release = 1;
+		self.goaldummy.owner = self;
+	}
+	// Repair our current Barricade
+	else if (!self.kills) {
+		// Trigger the animation
+		entity tempe = self;
+		self = self.goaldummy;
+		switch(self.health) {
+			case 5: window_carpenter_11(); break;
+			case 4: window_carpenter_9(); break;
+			case 3: window_carpenter_7(); break;
+			case 2: window_carpenter_5(); break;
+			case 1: window_carpenter_3(); break;
+			default: window_carpenter_1(); break;
+		}
+		self.health = 6;
+		self = tempe;
+
+		// We're actively building
+		self.kills = true;
+		self.ltime = time + 2.1;
+	} else {
+		if (self.ltime < time) {
+			self.goaldummy.frame = 88;
+			self.goaldummy.isspec = 0;
+			self.goaldummy.health = 6;
+		}
+	}
+
+	self.nextthink = time + 0.05;
+};
+
+//
 // PU_Carpenter()
 // Carpenter Power-Up Function
 //
 void() PU_Carpenter =
 {
-	entity tempe;
-	entity tempe2;
-	tempe2 = self;
+	// create our watcher entity
+	entity carp_watcher;
+	carp_watcher = PU_GetFreeEnt();
+	carp_watcher.classname = "pu_carpwatcher";
 
-	tempe = find(world, classname, "window");
+	carp_watcher.think = PU_CarpenterRepair;
+	carp_watcher.nextthink = time + 0.05;
 
-	// Repair Barricades
-	while(tempe != world) {
-		// Target non-full and board-able Barricades
-		if (tempe.health < 6 && tempe.health != -10) {
-			self = tempe;
-			window_carpenter_1();
-			self.health = 6;
-			self = tempe2;
-		}
-
-		tempe = find(tempe, classname, "window");
-	}
-
-	tempe = find(world, classname, "player");
-
-	// Reward Players with Points
-	while(tempe) {
-		addmoney(tempe, 200, 1);
-
-		tempe = find(tempe, classname, "player");
-	}
+	carp_powerup_active = true;
 };
 
 //
@@ -428,34 +526,41 @@ float() PU_CarpenterRequirement =
 //
 void() PU_MaxAmmo =
 {
+	entity players;
 	entity tempe;
 	
-	tempe = find(world, classname, "player");
+	players = find(world, classname, "player");
 
-	while(tempe) {
+	while(players) {
 
-		if (!tempe.downed) {
-			// Fill Primary Weapon
-			if (tempe.weapon) tempe.currentammo = getWeaponAmmo(tempe.weapon);
-			// Fill Secondary Weapon
-			if (tempe.secondaryweapon) tempe.secondaryammo = getWeaponAmmo(tempe.secondaryweapon);
-			// Fill Third Weapon
-			if (tempe.thirdweapon) tempe.thirdammo = getWeaponAmmo(tempe.thirdweapon);
+		if (!players.downed) {
+			// Fill all weapons
+			for (float i = 0; i < MAX_PLAYER_WEAPONS; i++) {
+				players.weapons[i].weapon_reserve = getWeaponAmmo(players.weapons[i].weapon_id);
+			}
 			// Give Grenades
-			tempe.primary_grenades = 4;
+			players.primary_grenades = 4;
 			// Give Betties
-			if (tempe.grenades & 2) tempe.secondary_grenades = 2;
+			if (players.grenades & 2) players.secondary_grenades = 2;
 		} else {
 			// Reset shots fired, fill 2 mags into reserve.
-			tempe.teslacount = 0;
-			tempe.currentammo = getWeaponMag(tempe.weapon) * 2;
+			players.teslacount = 0;
+			players.weapons[0].weapon_reserve = getWeaponMag(players.weapon) * 2;
 		}	
+
+		// Force the player to reload if their mag is empty
+		if (players.weapons[0].weapon_magazine == 0 || (IsDualWeapon(players.weapon) && players.weapons[0].weapon_magazine_left == 0)) {
+			tempe = self;
+			self = players;
+			W_Reload(S_BOTH);
+			self = tempe;
+		}
 
 		// MAX AMMO! text
 
 #ifdef FTE
 
-		ScrollText("MAX AMMO!", tempe);
+		ScrollText("MAX AMMO!", players);
 
 #else
 
@@ -463,7 +568,7 @@ void() PU_MaxAmmo =
 
 #endif // FTE
 
-		tempe = find(tempe, classname, "player");
+		players = find(players, classname, "player");
 	}
 };
 

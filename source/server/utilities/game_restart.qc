@@ -129,13 +129,14 @@ void(string perk_classname) GameRestart_TurnPerkOff =
 	while(tempe != world) {
 		setmodel(tempe, tempe.door_model_name);
 		setorigin(tempe, tempe.oldorigin);
+		setsize(tempe, VEC_HULL2_MIN, VEC_HULL2_MAX);
 
 		Light_None(tempe);
 
 		tempe.velocity = '0 0 0';
 		tempe.angles = tempe.finalangle;
 		tempe.touch = touch_perk;
-		tempe.revivesoda = 0;
+		tempe.perk_purchase_count = 0;
 
 		// Run our initial setup function
 		tempe.think = setup_perk;
@@ -238,6 +239,10 @@ void() GameRestart_ResetMysteryBox =
 	}
 }
 
+//
+// GameRestart_RestoreFakeRemovals()
+// Puts back everything "removed" using Ent_FakeRemove().
+//
 void() GameRestart_RestoreFakeRemovals =
 {
 	entity ent = findfloat(world, entity_removed, true);
@@ -251,29 +256,38 @@ void() GameRestart_RestoreFakeRemovals =
 		setsize(ent, ent.mins, ent.maxs);
 		setmodel(ent, ent.model);
 
-		ent = findfloat(ent, entity_removed, true);
+		ent = findfloat(world, entity_removed, true);
 	}
 }
 
-//moto -- put this here because it keeps soft_restart somewhat clean..
-void(entity door) reclose_door = {
-	entity  oldself;
-	oldself = self;
+//
+// GameRestart_OpenClosedDoors()
+// Restores doors that were previously opened in last session.
+//
+void() GameRestart_OpenClosedDoors =
+{
+	// Grab every open door.
+	entity door = findfloat(world, isopen, true);
+	entity temp_ent;
 
-	self = door;
-	setmodel(self, self.oldmodel);
-	self.solid = SOLID_BSP;
-	setorigin(self, self.oldorigin);
-	self.isopen = 0;
-	func_door_nzp();
+	while(door) {
+		setmodel(door, door.oldmodel);
+		door.solid = SOLID_BSP;
+		setorigin(door, door.oldorigin);
+		door.isopen = false;
 
-	//Close_Waypoint(self.wayTarget);
+		// Run the spawn function again.
+		temp_ent = self;
+		self = door;
+		func_door_nzp();
+		self = temp_ent;
 
-	self = oldself;
+		door = findfloat(world, isopen, true);
+	}
 }
 
 void() Soft_Restart = {
-	entity who, oldself, doors, endgame;
+	entity who, oldself, endgame;
 	self = find(world,classname,"player");
 	oldself = self;
 	
@@ -307,14 +321,7 @@ void() Soft_Restart = {
 	GameRestart_ResetPerkaColas(); 		// Turn all of the Perk-a-Cola lights off, reset states.
 	GameRestart_ResetMysteryBox();		// Clean up the Mystery Box, delete floating weapon, etc.
 	GameRestart_RestoreFakeRemovals();	// Puts back everything "removed" using Ent_FakeRemove().
-
-	//close doors
-	doors = findfloat(world, isopen, 1);
-	while (doors) {
-		if (doors.isopen)
-			reclose_door(doors);
-		doors = findfloat(world, isopen, 1);
-	}
+	GameRestart_OpenClosedDoors(); 		// Restores doors that were previously opened in last session.
 
 	//reset buyable ending
 	endgame = find(world, classname, "func_ending");
@@ -350,7 +357,10 @@ void() Soft_Restart = {
 	rounds = 0;
 	self.score = 0;
 	self.points = 0;
-	self.secondaryweapon = 0;
+
+	for(float i = 0; i < MAX_PLAYER_WEAPONS; i++) {
+		self.weapons[i].weapon_id = 0;
+	}
 
 	// naievil -- clear betty
 	self.secondary_grenades = 0;

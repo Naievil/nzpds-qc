@@ -47,7 +47,6 @@ float DOOR_POWER = 64;
 .float delay;
 .void() think1;
 .vector finaldest;
-.float dmg;
 .entity trigger_field;
 .float wait;
 .float speed;
@@ -103,8 +102,10 @@ void() door_hit_top =
 	if ((self.classname == "door_nzp_cost" || self.classname == "door_nzp" || self.classname == "door_open"))
 	{
 		//remove (self.owner.trigger_field); //moto - what does this do lol
-		if (!(self.spawnflags & 128))
+		if (!(self.spawnflags & 128)) {
 			setmodel(self, "");
+			self.solid = SOLID_NOT;
+		}
 
 		self.isopen = 1;
 		return;//so we dont have to reopen doors
@@ -497,9 +498,13 @@ void() LinkDoors =
 	
 			self = self.owner;
 
+			// This guards against spawning more than one
+			// trigger field upon restart.
+			if (self.owner.trigger_field)
+				return;
 			if (self.health)
 				return;
-			if (self.targetname)
+			if (self.targetname && self.classname != "door_nzp_cost")
 				return;
 
 			self.owner.trigger_field = spawn_field(cmins, cmaxs);
@@ -642,19 +647,20 @@ void() func_door_nzp =
 
 	self.blocked = door_blocked;
 	self.use = door_use;
-	
-	if (self.cost)
-	{
-		self.classname = "door_nzp_cost";
-		switch(self.sounds)
-		{
-			case 1: precache_sound("sounds/misc/wood_door.wav"); break;
-			case 2: precache_sound("sounds/misc/debris.wav"); break;
-			default: break;
-		}
+
+	if (!roundinit) {
+		if (self.cost) {
+			self.classname = "door_nzp_cost";
+			precache_sound("sounds/misc/ching.wav");
+			switch(self.sounds)
+			{
+				case 1: precache_sound("sounds/misc/wood_door.wav"); break;
+				case 2: precache_sound("sounds/misc/debris.wav"); break;
+				default: break;
+			}
+		} else
+			self.classname = "door_nzp";
 	}
-	else
-		self.classname = "door_nzp";
 	
 	if (!self.speed)
 		self.speed = 100;

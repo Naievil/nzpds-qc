@@ -28,6 +28,8 @@
 #define SPAWNFLAG_NOMESSAGE 	1
 #define SPAWNFLAG_NOTOUCH 		1
 
+void() Zombie_ReassignSpawnIDs;
+
 // the wait time has passed, so set back up for another activation
 void() multi_wait =
 {
@@ -50,9 +52,6 @@ void() multi_trigger =
 		return;		// already been triggered
 	}
 
-	if (self.noise)
-		sound (self, CHAN_VOICE, self.noise, 1, ATTN_NORM);
-
 // don't trigger again until reset
 	self.takedamage = DAMAGE_NO;
 
@@ -67,11 +66,7 @@ void() multi_trigger =
 	}
 	else
 	{	
-		// we can't just remove(self) here, because this is a touch function
-		// called while C code is looping through area links...
-		self.touch = SUB_Null;
-		self.nextthink = time + 0.1;
-		self.think = SUB_Remove;
+		Ent_FakeRemove(self);
 	}
 };
 
@@ -225,6 +220,8 @@ void() trigger_activator_touch =
 				if (t.classname == "spawn_zombie_away")
 				{
 					t.classname = "spawn_zombie";
+					t.spawn_id = zombie_spawn_points;
+					zombie_spawn_points++;
 					/*if (cvar("developer"))
 						setmodel(t, "progs/ai/zfull.mdl");*/
 				}
@@ -232,6 +229,7 @@ void() trigger_activator_touch =
 			} 
 		}
 	}
+	Zombie_ReassignSpawnIDs();
 }
 
 void() trigger_activator =
@@ -264,6 +262,24 @@ void() trigger_stuffcmd =
 {
 	InitTrigger();
 	self.touch = trigger_stuffcmd_touch;
+}
+
+void() trigger_interact_touch =
+{
+	if (other.classname != "player" || other.downed || other.isBuying == true || !PlayerIsLooking(other, self))
+		return;
+
+	if (other.button7) {
+		if (self.noise)
+			sound (other, CHAN_ITEM, self.noise, 1, ATTN_NORM);
+		multi_trigger();
+	}
+}
+
+void() trigger_interact =
+{
+	InitTrigger();
+	self.touch = trigger_interact_touch;
 }
 
 /* ===================
@@ -344,3 +360,71 @@ void() trigger_once =
 
 	trigger_multiple();
 }
+
+void() trigger_atroundend =
+{
+	self.classname = "trigger_atroundend";
+	//self.use = multi_use;
+}
+
+#define SPAWNFLAG_TRIGGERFIRE_PLAYER 		1
+#define SPAWNFLAG_TRIGGERFIRE_NODAMAGE		2
+#define SPAWNFLAG_TRIGGERFIRE_HEALTHNERF	4
+
+void() trigger_setfire_touch =
+{
+	if (other.aistatus != "1" && (other.classname == "player" && !(self.spawnflags & SPAWNFLAG_TRIGGERFIRE_PLAYER)))
+		return;
+
+	other.onfire = true;
+	other.fire_timeout = time + self.fire_timeout;
+
+	if ((self.spawnflags & SPAWNFLAG_TRIGGERFIRE_NODAMAGE) && other.aistatus == "1")
+		other.ltime = time + 10000;
+}
+
+void() trigger_setfire =
+{
+	InitTrigger ();
+	self.touch = trigger_setfire_touch;
+}
+
+//
+// Quake Triggers
+//
+
+// NZ:P START -- Spawnflags for not hurting clients and not hurting AI
+#define HURT_SPAWNFLAG_NOAI		1
+#define HURT_SPAWNFLAG_NOCLIENT	2
+// NZ:P END
+
+void() hurt_on =
+{
+	self.solid = SOLID_TRIGGER;
+	self.nextthink = -1;
+};
+
+void() hurt_touch =
+{
+	if ((other.classname == "player" && !(self.spawnflags & HURT_SPAWNFLAG_NOCLIENT)) ||
+	(other.aistatus == "1" && !(self.spawnflags & HURT_SPAWNFLAG_NOAI)))
+	{
+		self.solid = SOLID_NOT;
+		DamageHandler(other, self, self.dmg, S_ZOMBIE);
+		self.think = hurt_on;
+		self.nextthink = time + 1;
+
+		if (self.message)
+			centerprint(other, strcat(self.message, "\n"));
+	}
+
+	return;
+};
+
+void() trigger_hurt =
+{
+	InitTrigger ();
+	self.touch = hurt_touch;
+	if (!self.dmg)
+		self.dmg = 5;
+};

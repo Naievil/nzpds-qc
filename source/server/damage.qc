@@ -63,7 +63,6 @@ void() EndGame =
 	self.origin = '0 0 0';
 	setorigin (self, self.origin);
 	self.velocity = '0 0 0';
-	sound (self, CHAN_AUTO, "sounds/music/end.wav", 1, ATTN_NORM);
 
 	oldself = self;
 	
@@ -81,7 +80,7 @@ void() EndGame =
 	}
 	
 	self.think = EndGame_FadePrompt;
-	self.nextthink = time + 33;
+	self.nextthink = time + 28;
 }
 
 // when dead and other players exist and are alive, throw user into spectate mode
@@ -99,8 +98,6 @@ void() startspectate =
 	
 	self.downedloop = 0;
 	self.beingrevived = false;
-	self.model = "";
-	setmodel(self, self.model);
 	self.health = 100;
 	self.weaponmodel = "";
 	self.weapon2model = "";
@@ -117,33 +114,24 @@ void() startspectate =
 //      Returns 1 if there IS someone in the world that's not downed
 float() PollPlayersAlive = 
 {
-	float i, gotalive;
-	entity playerent;
-	
-	gotalive = 0;
-	
-	for (i = 1; i <= 4; i++)
-	{
-		playerent = findfloat(world, playernum, i);
-		
-		if (playerent) {
-			if (!playerent.downed && !playerent.isspec) {
-				gotalive = 1;
-				break;
-			}
-		}
+	entity players = find(world, classname, "player");
+
+	while(players != world) {
+		if (!players.downed)
+			return 1;
+
+		players = find(players, classname, "player");
 	}
-	
-	return gotalive;
+
+	return 0;
 }
 
 // Endgamesetup -- think function for setting up the death of everyone
 void() EndGameSetup =
 {
-	game_over = true;
 	self.health = 10;
 	self.think = EndGame;
-	self.nextthink = time + 5;
+	self.nextthink = time + 4;
 	self.weapon = 0;
 	self.currentammo = 0;
 	self.currentmag = 0;
@@ -152,6 +140,13 @@ void() EndGameSetup =
 	self.animend = SUB_Null;
 	self.perks = 0;
 	self.isspec = true;
+	self.movetype = MOVETYPE_TOSS;
+
+	if (!game_over) {
+		sound(self, CHAN_AUTO, "sounds/music/end.wav", 1, ATTN_NONE);
+		NotifyGameEnd();
+	}
+	game_over = true;
 	SetPerk(self, self.perks);
 	SwitchWeapon(0);	
 	addmoney(self, -self.points, 0);
@@ -163,9 +158,12 @@ void() EndGameSetup =
 //    if they aren't dead, we keep looping until our OWN death (45 seconds, so 300 loops)
 void() rec_downed = 
 {
-	self.downedloop++;
-	if (self.downedloop >= 300) {
+	if (!self.beingrevived)
+		self.downedloop += 1;
+
+	if (self.downedloop >= 30) {
 		DisableReviveIcon(self.electro_targeted);
+		revive_index--;
 		startspectate();
 		return;
 	}
@@ -178,29 +176,36 @@ void() rec_downed =
 	}
 	
 	self.think = rec_downed;
-	self.nextthink = time + 0.1;
+	self.nextthink = time + 1;
 }
 
+float() push_away_zombies;
 void() GetDown =
 {
 	// 'Pro Gamer Move' achievement.
-	if (rounds <= 1 && self.currentmag == 0 && 
-	self.currentmag2 == 0 && self.currentammo == 0 && 
-	self.secondarymag == 0 && self.secondarymag2 == 0 && 
-	self.secondaryammo == 0) {
+	if (rounds <= 1 && self.weapons[0].weapon_magazine == 0 && 
+	self.weapons[0].weapon_magazine_left == 0 && self.weapons[0].weapon_reserve == 0 && 
+	self.weapons[1].weapon_magazine == 0 && self.weapons[1].weapon_magazine_left == 0 && 
+	self.weapons[1].weapon_reserve == 0) {
 		GiveAchievement(9, self);
 	}
 
-	// Play Last Stand Animation
-	PAnim_GetDown1();
+	// Make any zombies inside of the player's bounding box leave
+	push_away_zombies();
 
 	// Force the player to prone.
-	if (self.stance == 2) self.new_ofs_z = self.view_ofs_z - 42;
-	if (self.stance == 1) self.new_ofs_z = self.view_ofs_z - 24;
+	if (self.stance == 2) self.new_ofs_z = self.view_ofs_z - (PLAYER_CROUCH_HEIGHT + PLAYER_PRONE_HEIGHT);
+	if (self.stance == 1) self.new_ofs_z = self.view_ofs_z - PLAYER_CROUCH_HEIGHT;
 	self.stance = 0;
+	setsize(self, PLAYER_MINS_CROUCHING, PLAYER_MAXS_CROUCHING);
 
-	// Get Rid of Mule Kick Weapon (FIXME -- this just obliterates the third slot)
-	self.thirdweapon = 0;
+	// Get rid of Mule Kick Weapon
+	for(float i = 0; i < MAX_PLAYER_WEAPONS; i++) {
+		if (self.weapons[i].is_mulekick_weapon == true) {
+			Weapon_RemoveWeapon(i);
+			Weapon_SetActiveInSlot(0, false);
+		}
+	}
 
 	// Calculate the loss in points, take away points from downed Player.
 	float point_difference;
@@ -216,11 +221,10 @@ void() GetDown =
 	self.velocity = self.zoom = 0;
 	self.downed = true;
 	self.dive_delay = 0;
-	self.movetype = MOVETYPE_NONE;
 
 	float players_still_alive = PollPlayersAlive();
 
-	if ((coop && !players_still_alive) || (!coop && !(self.perks & P_REVIVE))) {
+	if ((player_count && !players_still_alive) || (!player_count && !(self.perks & P_REVIVE))) {
 		EndGameSetup();
 		return;
 	} else {
@@ -228,7 +232,7 @@ void() GetDown =
 	}
 
 	// Initiate Self-Revive on Solo
-	if ((self.perks & P_REVIVE) && !coop) {	
+	if ((self.perks & P_REVIVE) && !player_count) {	
 		self.progress_bar = 10 + time;     
 		self.progress_bar_time = 10;
 		self.progress_bar_percent = 1;
@@ -237,10 +241,11 @@ void() GetDown =
 	// Take away weapons and Perks
 	self.perks = 0;
 	SetPerk(self, self.perks);
+
 	self.weaponbk = self.weapon;
-	self.currentammobk = self.currentammo;
-	self.currentmagbk = self.currentmag;
-	self.currentmagbk2 = self.currentmag2;
+	self.currentammobk = self.weapons[0].weapon_reserve;
+	self.currentmagbk = self.weapons[0].weapon_magazine;
+	self.currentmagbk2 = self.weapons[0].weapon_magazine_left;
 
 	// Reset Juggernog health
 	self.max_health = self.health = PLAYER_START_HEALTH;
@@ -258,34 +263,41 @@ void() GetDown =
 
 		switch(weapon_slot) {
 			case 1:
-				total_ammo = self.currentmag + self.currentmag2 + self.currentammo;
+				total_ammo = self.weapons[0].weapon_magazine + self.weapons[0].weapon_magazine_left + self.weapons[0].weapon_reserve;
 				break;
 			case 2:
-				total_ammo = self.secondarymag + self.secondarymag2 + self.secondaryammo;
-				self.weapon = self.secondaryweapon;
+				total_ammo = self.weapons[1].weapon_magazine + self.weapons[1].weapon_magazine_left + self.weapons[1].weapon_reserve;
+				Weapon_SwapWeapons(true);
 				break;
 		}
 
+		self.weaponbk = self.weapon;
+		self.currentammobk = self.weapons[0].weapon_reserve;
+		self.currentmagbk = self.weapons[0].weapon_magazine;
+		self.currentmagbk2 = self.weapons[0].weapon_magazine_left;
+
 		// If it's greater than the mag size, we can fill the magazine.
-		if (total_ammo > getWeaponMag(self.weapon)) {
-			self.currentmag = getWeaponMag(self.weapon);
+		if (total_ammo > getWeaponMag(self.weapon) || total_ammo == 0) {
+			self.weapons[0].weapon_magazine = getWeaponMag(self.weapon);
 
 			// subtract it from the total ammo
-			total_ammo -= self.currentmag;
+			if (total_ammo != 0)
+				total_ammo -= self.weapons[0].weapon_magazine;
 		} else {
-			self.currentmag = total_ammo;
+			self.weapons[0].weapon_magazine = total_ammo;
 			total_ammo = 0;
 		}
 
 		// Check for dual wield mag too
 		if (IsDualWeapon(self.weapon)) {
-			if (total_ammo > getWeaponMag(self.weapon)) {
-				self.currentmag2 = getWeaponMag(self.weapon);
+			if (total_ammo > getWeaponMag(self.weapon) || total_ammo == 0) {
+				self.weapons[0].weapon_magazine_left = getWeaponMag(self.weapon);
 
 				// subtract it from the total ammo
-				total_ammo -= self.currentmag2;
+				if (total_ammo != 0)
+					total_ammo -= self.weapons[0].weapon_magazine_left;
 			} else {
-				self.currentmag2 = total_ammo;
+				self.weapons[0].weapon_magazine_left = total_ammo;
 				total_ammo = 0;
 			}
 		}
@@ -294,23 +306,19 @@ void() GetDown =
 		if (self.weapon != W_RAY && self.weapon != W_PORTER) {
 			// Now see if the reserve ammo is more than max downed capacity
 			if (total_ammo > getWeaponMag(self.weapon)*2) {
-				self.currentammo = getWeaponMag(self.weapon)*2;
+				self.weapons[0].weapon_reserve = getWeaponMag(self.weapon)*2;
 			} else {
 				// It's not so just fill it
-				self.currentammo = total_ammo;
+				self.weapons[0].weapon_reserve = total_ammo;
 			}
 		} else {
-			self.currentammo = 0;
+			self.weapons[0].weapon_reserve = 0;
 		}
 	} else {
-		if (!coop) {
-			self.weapon = W_BIATCH;
-			self.currentammo = 12;
-			self.currentmag = self.currentmag2 = 6;
+		if (!player_count) {
+			Weapon_AssignWeapon(0, W_BIATCH, 6, 12);
 		} else {
-			self.weapon = W_COLT;
-			self.currentmag = 8;
-			self.currentammo = 16;
+			Weapon_AssignWeapon(0, W_COLT, 8, 16);
 		}
 	}
 
@@ -323,26 +331,34 @@ void() GetDown =
 	Set_W_Frame (startframe, endframe, 0, 0, 0, SUB_Null, self.weaponmodel, false, S_BOTH);
 
 	// Spawn Revive Sprite in Co-Op
-	if (coop) {
+	if (player_count) {
 		EnableReviveIcon(revive_index, self.origin + VEC_VIEW_OFS);
 		self.electro_targeted = revive_index;
 		revive_index++;
 	}
 
-	self.think = rec_downed;
-	self.nextthink = time + 0.1;
+	// Play Last Stand Animation
+	PAnim_GetDown();
 }
 
 void () GetUp =
-{
-	local string modelname;
-	float startframe;
-	float endframe;
+{	
+	// Play Getting Up Animation
+	PAnim_GetUp();
+
+	// Player is able to get up from here
+	if (Player_CanStandHere(self)) {
+		self.new_ofs_z = self.view_ofs_z + PLAYER_CROUCH_HEIGHT + PLAYER_PRONE_HEIGHT;
+		self.stance = 2;
+		setsize(self, PLAYER_MINS_STANDING, PLAYER_MAXS_STANDING);
+	}
+	// They can't, so make them crouch instead
+	else {
+		self.new_ofs_z = self.view_ofs_z + PLAYER_PRONE_HEIGHT;
+		self.stance = 1;
+		PAnim_CrouchWalk7(); // bad hack so they dont just end up fucking standing in a wall.
+	}
 	
-	playgetup();				// animation
-	
-	self.new_ofs_z = self.view_ofs_z + 42;
-	self.stance = 2;
 	self.health = 100;
 	self.downedloop = 0;		// used for death timing vs endgame
 	self.downed = 0;
@@ -358,40 +374,24 @@ void () GetUp =
 				self.currentmagbk += self.currentammobk;
 				self.currentammobk = 0;
 			}	
-		} else if (self.weapon == self.secondaryweapon) {
-			self.secondaryammo -= self.teslacount;
+		} else if (self.weapon == self.weapons[1].weapon_id) {
+			self.weapons[1].weapon_reserve -= self.teslacount;
 
 			// Take from the mag if the reserve is empty now
-			if (self.secondaryammo < 0) {
-				self.secondarymag += self.secondaryammo;
-				self.secondaryammo = 0;
+			if (self.weapons[1].weapon_reserve < 0) {
+				self.weapons[0].weapon_magazine += self.weapons[1].weapon_reserve;
+				self.weapons[1].weapon_reserve = 0;
 			}
 		}
 	}
 	
 	self.teslacount = 0;
 
-	if (!coop) {
+	if (!player_count) {
 		addmoney(self, self.requirespower, false);
 	}
 
-	if (self.weaponbk)
-	{
-		self.weapon = self.weaponbk;
-		self.currentammo = self.currentammobk;
-		self.currentmag = self.currentmagbk;
-		self.currentmag2 = self.currentmagbk2;
-	}	
-	modelname = GetWeaponModel(self.weapon, 0);
-	self.weaponmodel = modelname;
-	SwitchWeapon(self.weapon);
-	self.weapon2model = GetWeapon2Model(self.weapon);
-	self.movetype = MOVETYPE_WALK;
-  
-  	startframe = GetFrame(self.weapon,TAKE_OUT_START);
-	endframe = GetFrame(self.weapon,TAKE_OUT_END);
-	Set_W_Frame (startframe, endframe, 0, 0, 0, SUB_Null, modelname, false, S_BOTH);
-	
+	Weapon_AssignWeapon(0, self.weaponbk, self.currentmagbk, self.currentammobk);
 };
 
 // poll checking whether to see if our revive invoke is active
@@ -446,26 +446,16 @@ void(entity victim,entity attacker, float damage, float d_style) DamageHandler =
 
 		victim.health = victim.health - damage;
 
-		if (d_style == S_EXPLOSIVE) {
-			if (victim.health < z_health*0.5)
-			{
-				if (victim.crawling != TRUE && !(victim.health <= 0) && crawler_num < 5 && victim.classname != "ai_dog")
-				{
-					makeCrawler(victim);
-					GiveAchievement(3, attacker);
-				}
-				else
-				{
-					if (attacker.classname == "player" && (victim.health - damage) > 0)
-						addmoney(attacker, 10, 1);
-				}
+		if (d_style == S_EXPLOSIVE && damage != 0) {
+			if (victim.health > 0 && victim.crawling == 2) {
+				makeCrawler(victim);
+				GiveAchievement(3, attacker);
 			}
-			// MOTO - explosives seem to work fine without, but with will cause counter and QC errors..
-			//else
-			//	victim.th_die();	
 				
 			if (victim.health <= 0)
 				addmoney(attacker, 60, 1);
+			else
+				addmoney(attacker, 10, 1);
 		}
 
 		if (victim.health <= 0 || instakill_finished) {
@@ -582,9 +572,24 @@ float(entity targ, entity inflictor) CanDamage =
 	return FALSE;
 };
 
+float(float min, float max, vector org1, vector org2, float radius) calculate_proximity_value =
+{
+	float proximity_value;
+	float distance = fabs(vlen(org1 - org2));
+
+	if (distance <= radius) {
+		float normalized_distance = distance / radius;
+		proximity_value = min + (max - min) * (1 - normalized_distance);
+	} else {
+		proximity_value = min;
+	}
+	
+	return proximity_value;
+};
+
 void(entity inflictor, entity attacker, float damage2, float mindamage, float radius) DamgageExplode =
 {
-	float 	final_damage;
+	float 	final_damage = 0;
 	entity	ent;
 
 	float 	multi, r;
@@ -592,9 +597,13 @@ void(entity inflictor, entity attacker, float damage2, float mindamage, float ra
 	
 	while (ent != world)
 	{
-		if(ent.classname == "player" && ent == attacker) // we don't want OUR explosives to harm other players..
+		if(ent.classname == "player")
 		{
-			if (ent.perks & P_FLOP)
+			if (ent.perks & P_FLOP)	// PhD Flopper makes us immune to any explosive damage
+				final_damage = 0;
+			else if (inflictor.classname == "betty") // Self-inflicted betties don't do damage either.
+				final_damage = 0;
+			else if (inflictor.owner != ent) // we don't want OUR explosives to harm other players..
 				final_damage = 0;
 			else
 			{
@@ -622,24 +631,22 @@ void(entity inflictor, entity attacker, float damage2, float mindamage, float ra
 					final_damage /= radius;
 					final_damage *= 60;
 				}
-				DamageHandler (ent, ent, final_damage, S_EXPLOSIVE);
-
-				// shake the camera on impact
-				vector distance;
-				distance = inflictor.angles - ent.angles;
-
-				// just to prevent radical punchangles
-				while(distance_x > 10 || distance_x < -10) {
-					distance_x /= 2;
-				}
-				while(distance_y > 10 || distance_y < -10) {
-					distance_y /= 2;
-				}
-
-				// apply
-				ent.punchangle_x = distance_x;
-				ent.punchangle_y = distance_y;
 			}
+			// shake the camera on impact
+			vector distance;
+			distance = inflictor.angles - ent.angles;
+
+			// just to prevent radical punchangles
+			while(distance_x > 10 || distance_x < -10) {
+				distance_x /= 2;
+			}
+			while(distance_y > 10 || distance_y < -10) {
+				distance_y /= 2;
+			}
+			
+			// apply
+			ent.punchangle_x = distance_x;
+			ent.punchangle_y = distance_y;
 		}
 		else if (ent.classname == "explosive_barrel")
 		{
@@ -683,30 +690,58 @@ void(entity inflictor, entity attacker, float damage2, float mindamage, float ra
 				}
 			}
 
-			r = rounds;
-			multi = 1.07;
-			while(r > 0)
-			{
-				multi *= 1.05;
-				r --;
+			// cypress -- accurate explosive damage
+			// cod likes to override the damage to ai with
+			// explosives (yay!).
+			if (inflictor.classname == "grenade") {
+				// grenades follow the logic of (rounds + (rand 150-500))
+				// rounds is basically meaningless though.. wtf?
+				final_damage = rounds + rint(random() * 350) + 150;
+			} else if (inflictor.classname == "projectile_grenade") {
+				// projectile-based grenades (mustang & sally) seem to do
+				// more damage than standard grenades.
+				// (rounds + (rand 1200-5000))
+				final_damage = rounds + rint(random() * 3800) + 1200;
+			} else if (inflictor.classname == "rocket") {
+				// rockets were kinda tricky to figure out, this is as close
+				// as i can get and i'm not super confident..
+				// (rounds * (rand 0-100) * weapon_damage/500).
+				final_damage = (rounds * rint(random() * 100)) * damage2/500;
+			} else if (inflictor.classname == "projectile_raybeam") {
+				//final_damage = calculate_proximity_value(mindamage, damage2, inflictor.origin, ent.origin, radius);
+				//bprint(PRINT_HIGH, strcat("damage: ", ftos(final_damage), "\n"));
+				final_damage = damage2;
+			} else if (inflictor.classname == "player") {
+				// phd flopper.
+				final_damage = calculate_proximity_value(mindamage, damage2, inflictor.origin, ent.origin, radius);
+			} else {
+				r = rounds;
+				multi = 1.07;
+				while(r > 0)
+				{
+					multi *= 1.05;
+					r --;
+				}
+				
+				if (mindamage == 75) 
+				{
+					final_damage = (200 * multi) + 185;
+				}
+				else 
+				{
+					final_damage = (mindamage + damage2)/2;
+				}
 			}
-			
-			if (mindamage == 75) 
-			{
-				final_damage = (200 * multi) + 185;
-			}
-			else 
-			{
-				final_damage = (mindamage + damage2)/2;
-			}
-			
-			if (final_damage > 0)
-			{
-				/* ndaekill = true; */
-				if (CanDamage (ent, inflictor))
-					DamageHandler (ent, attacker, final_damage, S_EXPLOSIVE);
-				/* kill = false; */
-			}
+
+			// to decide if this should make a crawler, check if we've done 10% or more damage
+			if (final_damage / ent.health > 0.10 && ent.crawling != true && ent.classname != "ai_dog") {
+				ent.crawling = 2;
+			}	
+		}
+
+		if (final_damage > 0) {
+			if (CanDamage (ent, inflictor))
+				DamageHandler (ent, attacker, final_damage, S_EXPLOSIVE);
 		}
 		ent = ent.chain;
 	}

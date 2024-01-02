@@ -165,8 +165,8 @@ void() HUD_AmmoString =
 			message = "NO AMMO";
 			textcolor = [215/255, 0, 0];
 		}
-		// Display LOW AMMO if both are low.
-		else if (reserve_is_low == true && mag_is_low == true)
+		// Display LOW AMMO if mag is low and reserve is empty
+		else if (mag_is_low == true && getstatf(STAT_AMMO) <= 0)
 		{
 			message = "LOW AMMO";
 			textcolor = [219/255, 203/255, 19/255];	
@@ -310,15 +310,18 @@ void(float pwidth, float width, float height, float playernum) PointUpdate =
 
 void(float width, float height) HUD_Points =
 {
-	float pointlength = 0, increm = 10, i = 0, pointwidth = 0, x = 0;
+	float pointlength = 0, increm = 10, pointwidth = 0, x = 0;
 	float backwidth = 0.8*width;
 	vector TEXTCOLOR = '0 0 0';
-	
-	for (i = 3; i >= 0; i = i - 1)
+
+	for (int i = 3; i >= 0; i = i - 1)
 	{
-		if (playerpoints[i] == -1)
+		float player_number = getplayerkeyfloat(i, "viewentity");
+		entity client = findfloat(world, playernum, player_number);
+
+		if (client == world || client.movetype == MOVETYPE_BOUNCE)
 			continue;
-			
+
 		switch(i) {
 			case 1: TEXTCOLOR = TEXT_LIGHTBLUE; break;
 			case 2: TEXTCOLOR = TEXT_ORANGE; break;
@@ -326,19 +329,35 @@ void(float width, float height) HUD_Points =
 			default: TEXTCOLOR = [1, 1, 1]; break;
 		}
 
-		pointwidth = stringwidth(ftos(playerpoints[i]), 0, [12, 12]);
+		pointwidth = stringwidth(ftos(client.points), 0, [12, 12]);
 		x = (99 - pointwidth)/2 + GetUltraWideOffset();
 
 		if ((i + 1) == getstatf(STAT_PLAYERNUM)) {
 			drawpic([3 + GetUltraWideOffset(), g_height - 97 - (i * 25)], "gfx/hud/moneyback.tga", [96, 24], [1,1,1], 1);
-			drawstring([x, g_height - 92 - (i * 25)], ftos(playerpoints[i]), [12, 12], TEXTCOLOR, 1, 0);
+			drawstring([x, g_height - 92 - (i * 25)], ftos(client.points), [12, 12], TEXTCOLOR, 1, 0);
 		} else {
 			drawpic([-7 + GetUltraWideOffset(), g_height - 97 - (i * 25)], "gfx/hud/moneyback_condensed.tga", [96, 24], [1,1,1], 1);
-			drawstring([x - 9, g_height - 92 - (i * 25)], ftos(playerpoints[i]), [12, 12], TEXTCOLOR, 1, 0);
+			drawstring([x - 9, g_height - 92 - (i * 25)], ftos(client.points), [12, 12], TEXTCOLOR, 1, 0);
 		}
 
 		PointUpdate(x + 70, width, height, i + 1);
 	}
+}
+
+/************************
+*    HUD_CharacterName  *
+************************/
+
+void(float width, float height) HUD_CharacterName =
+{
+	float x = 100 + GetUltraWideOffset();
+	float alpha = 1;
+
+	if (nameprint_time - 1 < time) {
+		alpha = (nameprint_time - time);
+	}
+
+	drawstring([x, height - 92 - ((getstatf(STAT_PLAYERNUM) - 1) * 25)], getstats(STAT_PLAYERNAME), [12, 12], [1, 1, 1], alpha, 0);
 }
 
 /*******************
@@ -466,6 +485,7 @@ void(float width, float height) HUD_Rounds =
 	}
 	else if (rounds_change == 2)//this is the rounds icon moving from middle
 	{
+		stopwatch_round_isactive = true;
 		float round_center_y_offset = 0;
 		float round_center_x_offset = 0;
 				
@@ -481,6 +501,7 @@ void(float width, float height) HUD_Rounds =
 	}
 	else if (rounds_change == 3)//shift to white
 	{
+		stopwatch_round_isactive = false;
 		if (!color_shift_init)
 		{
 			color_shift[0] = 107;
@@ -561,7 +582,7 @@ void(float width, float height) HUD_Rounds =
 	
 		if (endroundchange > time)
 		{
-			blinking = ((int)(time*1000)&510) - 255;
+			blinking = ((int)(time*475)&510) - 255;
 			blinking = fabs(blinking);
 		}
 		else
@@ -628,8 +649,10 @@ void(float width, float height) HUD_Rounds =
 			x_offset = x_offset +  roundwidth_num - (8*width/480);
 		}
 		
-		if (endroundchange == 0)
-			endroundchange = time + 2;
+		if (endroundchange == 0) {
+			endroundchange = time + 7.5;
+			blinking = 0;
+		}
 	}
 	else if (rounds_change == 5)//blink white
 	{
@@ -696,9 +719,8 @@ void(float width, float height) HUD_Rounds =
 		endroundchange = 0;
 		
 		color_shift_init = 0;
-		blinking = ((int)(time*1000)&510) - 255;
-		
-		blinking = fabs(blinking);
+		blinking += frametime*500;
+		if (blinking > 255) blinking = 255;
 			
 		if (rounds > 0 && rounds < 11)
 		{
@@ -757,6 +779,7 @@ void(float width, float height) HUD_Rounds =
 	}
 	else if (rounds_change == 7)//blink white while fading back
 	{
+		stopwatch_round_isactive = true;
 		if (!color_shift_init)
 		{
 			color_shift_end[0] = 107;
@@ -1038,12 +1061,20 @@ void(float width, float height) HUD_Perks =
 	if (cvar("vid_ultrawide_limiter"))
 		x += ULTRAWIDE_OFFSET;
 
+	// Double-Tap can have 2 icons depending on
+	// machine-specified version.
+	string double_tap_icon;
+	if (double_tap_version == 1) // damage buffed
+		double_tap_icon = "gfx/hud/double2.tga";
+	else // just rof
+		double_tap_icon = "gfx/hud/double.tga";
+
 	// Draw second column first -- these need to be
 	// overlayed below the first column.
 	for (float i = 4; i < 8; i++) {
 		if (perk_order[i]) {
 			if (perk_order[i] == P_JUG) {drawpic([x, y], "gfx/hud/jug.tga", [scale, scale], [1,1,1], 1);}
-			if (perk_order[i] == P_DOUBLE) {drawpic([x, y], "gfx/hud/double.tga", [scale, scale, 1], [1,1,1], 1);}
+			if (perk_order[i] == P_DOUBLE) {drawpic([x, y], double_tap_icon, [scale, scale, 1], [1,1,1], 1);}
 			if (perk_order[i] == P_SPEED) {drawpic([x, y], "gfx/hud/speed.tga", [scale, scale, 1], [1,1,1], 1);}
 			if (perk_order[i] == P_REVIVE) {drawpic([x, y], "gfx/hud/revive.tga", [scale, scale, 1], [1,1,1], 1);}
 			if (perk_order[i] == P_FLOP) {drawpic([x, y], "gfx/hud/flopper.tga", [scale, scale, 1], [1,1,1], 1);}
@@ -1064,7 +1095,7 @@ void(float width, float height) HUD_Perks =
 	for (float i = 0; i < 4; i++) {
 		if (perk_order[i]) {
 			if (perk_order[i] == P_JUG) {drawpic([x, y], "gfx/hud/jug.tga", [scale, scale, 1], [1,1,1], 1);}
-			if (perk_order[i] == P_DOUBLE) {drawpic([x, y], "gfx/hud/double.tga", [scale, scale, 1], [1,1,1], 1);}
+			if (perk_order[i] == P_DOUBLE) {drawpic([x, y], double_tap_icon, [scale, scale, 1], [1,1,1], 1);}
 			if (perk_order[i] == P_SPEED) {drawpic([x, y], "gfx/hud/speed.tga", [scale, scale, 1], [1,1,1], 1);}
 			if (perk_order[i] == P_REVIVE) {drawpic([x, y], "gfx/hud/revive.tga", [scale, scale, 1], [1,1,1], 1);}
 			if (perk_order[i] == P_FLOP) {drawpic([x, y], "gfx/hud/flopper.tga", [scale, scale, 1], [1,1,1], 1);}
@@ -1086,6 +1117,39 @@ void(float width, float height) HUD_Weaponstring =
 	weaponstring = GetWeaponName(getstatf(STAT_ACTIVEWEAPON));
 	float x = g_width - 62 - stringwidth(weaponstring, 0, [12, 12]);
 	drawstring([x - GetUltraWideOffset(), g_height - 49], weaponstring, [12, 12], [1, 1, 1], 1, 0);
+}
+
+/*********************
+* HUD Bouncing Betty *
+*********************/
+
+void(float width, float height) HUD_BouncingBetty =
+{
+	float top_x, bot_x, but_x;
+	string betty_key;
+	string betty_space;
+	string activate_string, activate_string2;
+
+	tokenize(findkeysforcommand("impulse 33"));
+	betty_key = strtoupper(keynumtostring(stof(argv(0))));
+
+	betty_space = "";
+	for(float i = 0; i < strlen(betty_key); i++) {
+		betty_space = strcat(betty_space, " ");
+	}
+
+	activate_string = strcat("Press ", betty_space, " to place a");
+	activate_string2 = "Bouncing Betty";
+
+	top_x = (g_width/2) - (stringwidth(activate_string, 0, [12, 12])/2);
+	bot_x = (g_width/2) - (stringwidth(activate_string2, 0, [12, 12])/2);
+
+	drawstring([top_x, g_height - 303], activate_string, [12, 12], [1, 1, 1], 1, 0); 
+	drawstring([bot_x, g_height - 289], activate_string2, [12, 12], [1, 1, 1], 1, 0); 
+
+	// Draw the highlighted button
+	but_x = top_x + stringwidth("Press ", 0, [12, 12, 0]);
+	drawstring([but_x, g_height - 303], betty_key, [12, 12], [1, 1, 0], 1, 0); 
 }
 
 /*******************
@@ -1138,19 +1202,31 @@ vector crosshair_color;
 
 void() Draw_Crosshair =
 {
-	//void(float width, vector pos1, vector pos2, vector rgb, float alpha, optional float drawflag) drawline
 	if (cvar("cl_crosshair_debug")) {
 		drawline(2, [g_width/2, g_height/2, 0], [0, g_height, 0], [1, 0, 0], 0.5);
 		drawline(2, [g_width/2, g_height/2, 0], [g_width, 0, 0], [0, 1, 1], 0.5);
 		drawline(2, [g_width, g_height, 0], [g_width/2, g_height/2, 0], [0, 1, 0], 0.5);
 		drawline(2, [0, 0, 0], [g_width/2, g_height/2, 0], [0, 0, 1], 0.5);
-		//return;
 	}
+
+	hide_viewmodel = false;
+	if (getstatf(STAT_WEAPONZOOM) == 2 && zoom_2_time < time)
+    {
+		hide_viewmodel = true;
+		drawfill('0 0 0',  [g_width/2 - g_height/2, g_height, 0], '0 0 0', 1, 0);
+		drawpic([(g_width/2 - g_height/2),0,0], "gfx/hud/scope_nb.tga", [g_height, g_height, 1], [1,1,1], 1);
+		drawfill([(g_width/2 + g_height/2),0,0],  [g_width, g_height, 0], '0 0 0', 1, 0);
+		return;
+	}
+
+	float crosshair_value = cvar("crosshair");
+	if (!crosshair_value || getstatf(STAT_WEAPONZOOM) == 1)
+		return;
 
 	if (!crosshair_opacity)
 		crosshair_opacity = 1;
 
-	if (K_BACKDOWN || K_FORWARDDOWN || K_LEFTDOWN || K_RIGHTDOWN || input_buttons == 2) {
+	if ((K_BACKDOWN || K_FORWARDDOWN || K_LEFTDOWN || K_RIGHTDOWN || input_buttons == 2) && crosshair_value == 1) {
 		croshhairmoving = 1;
 
 		crosshair_opacity -= frametime;
@@ -1183,15 +1259,6 @@ void() Draw_Crosshair =
 		crosshair_color = TEXT_RED;
 	else
 		crosshair_color = [1, 1, 1];
-
-	hide_viewmodel = false;
-	if (getstatf(STAT_WEAPONZOOM) == 2 && zoom_2_time < time)
-    {
-		hide_viewmodel = true;
-		drawfill('0 0 0',  [g_width/2 - g_height/2, g_height, 0], '0 0 0', 1, 0);
-		drawpic([(g_width/2 - g_height/2),0,0], "gfx/hud/scope_nb.tga", [g_height, g_height, 1], [1,1,1], 1);
-		drawfill([(g_width/2 + g_height/2),0,0],  [g_width, g_height, 0], '0 0 0', 1, 0);
-	}
 	
 	if (getstatf(STAT_HEALTH) < 1)
 		return;
@@ -1215,41 +1282,61 @@ void() Draw_Crosshair =
 		}
     }
 
-	if (getstatf(STAT_WEAPONZOOM) != 1 && getstatf(STAT_WEAPONZOOM) != 2) {
-		// 'O' crosshair
-		if (getstatf(STAT_ACTIVEWEAPON) == W_M2 || getstatf(STAT_ACTIVEWEAPON) == W_FIW || getstatf(STAT_ACTIVEWEAPON) == W_TESLA || getstatf(STAT_ACTIVEWEAPON) == W_DG3) {
-			float circle_offset = stringwidth("O", 0, [12, 12])/2;
-			drawstring([g_width/2 - circle_offset, g_height/2 - circle_offset], "O", [12, 12], crosshair_color, 1, 0);
+	// Standard crosshair (+)
+	if (crosshair_value == 1) {
+		int x_value, y_value;
+		int crosshair_offset;
+			
+		crosshair_offset = CrossHairWeapon(getstatf(STAT_ACTIVEWEAPON), getstatf(STAT_PLAYERSTANCE)) + cur_spread;
+			
+		if (CrossHairMaxSpread(getstatf(STAT_ACTIVEWEAPON), getstatf(STAT_PLAYERSTANCE)) < crosshair_offset)
+			crosshair_offset = CrossHairMaxSpread(getstatf(STAT_ACTIVEWEAPON), getstatf(STAT_PLAYERSTANCE));
+			
+		if (perks & P_DEAD)
+			crosshair_offset *= 0.65;
+
+		crosshair_offset_step += (crosshair_offset - crosshair_offset_step) * 0.5;
+
+		// Creds to heartologic for some actually good crosshair position stuff.
+		vector crossSize = [1, 5];
+		vector screenSize = [g_width, g_height];
+
+		drawfill(screenSize / 2 - [crossSize.x, +crossSize.y * 2 + crosshair_offset_step], crossSize, crosshair_color, crosshair_opacity, 0); // top
+		drawfill(screenSize / 2 - [crossSize.x, -crossSize.y * 1 - crosshair_offset_step + 2], crossSize, crosshair_color, crosshair_opacity, 0); // bottom
+		drawfill(screenSize / 2 - [+crossSize.y * 2 + crosshair_offset_step, crossSize.x], [crossSize.y, crossSize.x], crosshair_color, crosshair_opacity, 0); // right
+		drawfill(screenSize / 2 - [-crossSize.y * 1 - crosshair_offset_step, crossSize.x], [crossSize.y, crossSize.x], crosshair_color, crosshair_opacity, 0); // left
+	}
+	// Area of Effect (o)
+	else if (crosshair_value == 2) {
+		float circle_offset = stringwidth("O", 0, [14, 14])/2;
+		drawstring([g_width/2 - circle_offset, g_height/2 - circle_offset], "O", [14, 14], crosshair_color, 1, 0);
+	}
+	// Dot crosshair (.)
+	else if (crosshair_value == 3) {
+		vector screenSize2 = [g_width, g_height];
+		drawfill(screenSize2 / 2 - [2, 2], [4, 4], crosshair_color, crosshair_opacity, 0); // dot
+	}
+	// Grenade crosshair
+	else if (crosshair_value == 4) {
+		if (crosshair_pulse_grenade) {
+			crosshair_offset_step = 0;
+			cur_spread = 12;
 		}
-		// '.' crosshair
-		else if (getstatf(STAT_ACTIVEWEAPON) == W_PANZER || getstatf(STAT_ACTIVEWEAPON) == W_LONGINUS) {
-			vector screenSize2 = [g_width, g_height];
-			drawfill(screenSize2 / 2 - [2, 2], [4, 4], crosshair_color, crosshair_opacity, 0); // dot
-		} 
-		// Standard crosshair
-		else {
-			int x_value, y_value;
-			int crosshair_offset;
-			
-			crosshair_offset = CrossHairWeapon(getstatf(STAT_ACTIVEWEAPON), getstatf(STAT_PLAYERSTANCE)) + cur_spread;
-			
-			if (CrossHairMaxSpread(getstatf(STAT_ACTIVEWEAPON), getstatf(STAT_PLAYERSTANCE)) < crosshair_offset)
-				crosshair_offset = CrossHairMaxSpread(getstatf(STAT_ACTIVEWEAPON), getstatf(STAT_PLAYERSTANCE));
-			
-			if (perks & P_DEAD)
-				crosshair_offset *= 0.65;
 
-			crosshair_offset_step += (crosshair_offset - crosshair_offset_step) * 0.5;
+		crosshair_pulse_grenade = false;
 
-			// Creds to heartologic for some actually good crosshair position stuff.
-			vector crossSize = [1, 5];
-			vector screenSize = [g_width, g_height];
+		int crosshair_offset2;	
+		crosshair_offset2 = 3 + cur_spread;
+		crosshair_offset_step += (crosshair_offset2 - crosshair_offset_step) * 0.05;
 
-			drawfill(screenSize / 2 - [crossSize.x, +crossSize.y * 2 + crosshair_offset_step], crossSize, crosshair_color, crosshair_opacity, 0); // top
-			drawfill(screenSize / 2 - [crossSize.x, -crossSize.y * 1 - crosshair_offset_step], crossSize, crosshair_color, crosshair_opacity, 0); // bottom
-			drawfill(screenSize / 2 - [+crossSize.y * 2 + crosshair_offset_step, crossSize.x], [crossSize.y, crossSize.x], crosshair_color, crosshair_opacity, 0); // right
-			drawfill(screenSize / 2 - [-crossSize.y * 1 - crosshair_offset_step, crossSize.x], [crossSize.y, crossSize.x], crosshair_color, crosshair_opacity, 0); // left
-		}
+		// Creds to heartologic for some actually good crosshair position stuff.
+		vector crossSize2 = [1, 5];
+		vector screenSize3 = [g_width, g_height];
+
+		drawfill(screenSize3 / 2 - [crossSize2.x, +crossSize2.y * 2 + crosshair_offset_step], crossSize2, crosshair_color, crosshair_opacity, 0); // top
+		drawfill(screenSize3 / 2 - [crossSize2.x, -crossSize2.y * 1 - crosshair_offset_step + 2], crossSize2, crosshair_color, crosshair_opacity, 0); // bottom
+		drawfill(screenSize3 / 2 - [+crossSize2.y * 2 + crosshair_offset_step, crossSize2.x], [crossSize2.y, crossSize2.x], crosshair_color, crosshair_opacity, 0); // right
+		drawfill(screenSize3 / 2 - [-crossSize2.y * 1 - crosshair_offset_step, crossSize2.x], [crossSize2.y, crossSize2.x], crosshair_color, crosshair_opacity, 0); // left
 	}
 }
 
@@ -1297,21 +1384,21 @@ void() HUD_Broadcast = {
 
 void() HUD_Scores =
 {
-	string subtext = "Name                Kills        Score";
-	float xback, i, x;
+	int j;
 	vector TEXTCOLOR = [1, 1, 1];
 	
 	if(serverkey("constate") != "disconnected")
 	{
-		float print_width = stringwidth(subtext, 0, [0.015*g_width, 0.015*g_width, 0]);
-		x = (g_width - print_width)/2;
-		drawstring([x,g_height*(5/12), 0], subtext, [0.015*g_width, 0.015*g_width, 0], [1, 1, 1], 1, 0);
+		// Headers
+		drawstring([g_width/2 + 15, 175], "Points", [12, 12], TEXTCOLOR, 1, 0); 
+		drawstring([g_width/2 + 170, 175], "Kills", [12, 12], TEXTCOLOR, 1, 0); 
 	
-		xback = x;
-	
-		for (i = 0; i < 4; i = i + 1)
+		for (int i = 0; i < 4; i = i + 1)
 		{
-			if (playerpoints[i] == -1)
+			float player_number = getplayerkeyfloat(i, "viewentity");
+			entity client = findfloat(world, playernum, player_number);
+
+			if (client == world || client.movetype == MOVETYPE_BOUNCE)
 				break;
 			
 			switch(i) {
@@ -1320,37 +1407,58 @@ void() HUD_Scores =
 				case 3: TEXTCOLOR = TEXT_GREEN; break;
 				default: TEXTCOLOR = [1, 1, 1]; break;
 			}
+
+			//
+			// Since positioning is center-aligned, we need to be careful how we do our X and Y
+			// pos. to keep things looking nicely centered and even with different aspect ratios.
+			//
+
+			// Center moneyback
+			drawpic([g_width/2 - 48,  195 + (30 * i)], "gfx/hud/moneyback.tga", [96, 24], [1,1,1], 1);
+			// Left
+			for(j = 0; j < 3; j++) {
+				drawpic([(g_width/2 - 48) - (70 * (j+1)),  195 + (30 * i)], "gfx/hud/moneyback.tga", [96, 24], [1,1,1], 1);
+			}
+			// Right
+			for(j = 0; j < 3; j++) {
+				drawpic([(g_width/2 - 48) + (70 * (j+1)),  195 + (30 * i)], "gfx/hud/moneyback.tga", [96, 24], [1,1,1], 1);
+			}
 			
-			print_width = stringwidth(ftos(playerpoints[i]), 0, [0.015*g_width, 0.015*g_width, 0]);
-			x = (g_width + (0.5*g_width) - print_width)/2;
-			drawstring([x,g_height*(5.75/12)+(i*g_width*0.03), 0], ftos(playerpoints[i]), [0.015*g_width, 0.015*g_width, 0], TEXTCOLOR, 1, 0);
-			drawstring([x/1.36,g_height*(5.75/12)+(i*g_width*0.03), 0], ftos(playerkills[i]), [0.015*g_width, 0.015*g_width, 0], TEXTCOLOR, 1, 0); 
-			drawstring([xback,g_height*(5.75/12)+(i*g_width*0.03), 0], playernames[i], [0.015*g_width, 0.015*g_width, 0], TEXTCOLOR, 1, 0); 
+			// Name
+			string player_name = getplayerkeyvalue(i, "name");
+			drawstring([g_width/2 - 245, 200 + (30 * i)], player_name, [12, 12], TEXTCOLOR, 1, 0); 
+
+			// Points
+			float point_width = stringwidth(ftos(client.points), 0, [12, 12]);
+			float point_x = ((g_width/2) - (point_width)/2) + 52;
+			drawstring([point_x, 200 + (30 * i)], ftos(client.points), [12, 12], TEXTCOLOR, 1, 0); 
+
+			// Kills
+			float kill_width = stringwidth(ftos(client.points), 0, [12, 12]);
+			float kill_x = ((g_width/2) - (kill_width)/2) + 210;
+			drawstring([kill_x, 200 + (30 * i)], ftos(client.kills), [12, 12], TEXTCOLOR, 1, 0); 
 		}
 	}
 }
 
 void() HUD_Endgame = {
-
-	string message = "GAME OVER";
-	string rnd = " rounds";
+	string game_over = "GAME OVER";
+	string survive;
+	string round;
 
 	if (rounds == 1)
-		rnd = " round";
+		round = " Round";
+	else
+		round = " Rounds";
 
-	string survive = strcat("You survived ", ftos(rounds), rnd);
-	
-	// first message
-	float print_width = stringwidth(message, 0, [(1/30)*g_width, (1/30)*g_width, 0]);
-	float x = (g_width - print_width)/2;
-	drawstring([x, g_height*(1/4), 0], message, [(1/30)*g_width, (1/30)*g_width, 0], [1, 1, 1], 1, 0);
+	survive = strcat("You Survived ", ftos(rounds), round);
 
-	// second message
-	print_width = stringwidth(survive, 0, [0.025*g_width, 0.025*g_width, 0]);
-	x = (g_width - print_width)/2;
-	drawstring([x,g_height*(1/3), 0], survive, [0.025*g_width, 0.025*g_width, 0], [1, 1, 1], 1, 0);
-	
-	// we can reuse our tab scores for the endgame
+	float game_over_width = stringwidth(game_over, 0, [24, 24]);
+	drawstring([g_width/2 - game_over_width/2, 100], game_over, [24, 24], [1, 1, 1], 1, 0);
+
+	float survive_width = stringwidth(survive, 0, [18, 18]);
+	drawstring([g_width/2 - survive_width/2, 135], survive, [18, 18], [1, 1, 1], 1, 0);
+
 	HUD_Scores();
 }
 
@@ -1477,7 +1585,8 @@ void(float width, float height) HUD_PlayerNames =
 		float player_number = getplayerkeyfloat(i, "viewentity");
 
 		string text = getplayerkeyvalue(i, "name");
-		vector player_origin = getentity(player_number, GE_ORIGIN) + '0 0 48';
+		entity plr = findfloat(world, playernum, player_number);
+		vector player_origin = plr.origin + '0 0 48';
 		vector screen_position = project(player_origin);
 		vector text_color = '1 1 1';
 
@@ -1541,6 +1650,26 @@ void(float width, float height) HUD_StopWatch =
 	drawstring([width - (strlen(stopwatch) * 12) - 2, 2], stopwatch, [12, 12], TEXT_ORANGE, 1, 0);
 }
 
+void(float width, float height) HUD_RoundStopWatch =
+{
+	string sec, min, hr;
+	string stopwatch;
+
+	if (stopwatch_round_sec < 10) {
+		sec = strcat("0", substring(ftos(stopwatch_round_sec), 0, 3));
+	} else {
+		sec = substring(ftos(stopwatch_round_sec), 0, 4);
+	}
+
+	if (sec == "00") sec = "00.0";
+	if (stopwatch_round_min < 10) min = strcat("0", ftos(stopwatch_round_min)); else min = ftos(stopwatch_round_min);
+	if (stopwatch_round_hr < 10) hr = strcat("0", ftos(stopwatch_round_hr)); else hr = ftos(stopwatch_round_hr);
+
+	stopwatch = strcat(hr, ":", min, ":", sec);
+
+	drawstring([width - (strlen(stopwatch) * 12) - 2, 16], stopwatch, [12, 12], [1, 1, 1], 1, 0);
+}
+
 /*******************
 *     HUD Draw     *
 *******************/
@@ -1555,9 +1684,7 @@ void(float width, float height) HUD_Draw =
 	
 	if (!getstatf(STAT_SPECTATING) && (getstatf(STAT_HEALTH) > 1) && !score_show)
 	{
-        
-        if (vmodel.model == GetWeaponModel(getstatf(STAT_ACTIVEWEAPON), FALSE) && vmodel.model != "" || getstatf(STAT_WEAPONZOOM) == 2)
-		    Draw_Crosshair();
+		Draw_Crosshair();
 
 		if (!cvar("waypoint_mode")) {
 			HUD_Health(width, height);
@@ -1569,6 +1696,12 @@ void(float width, float height) HUD_Draw =
 
             if (vmodel.model == GetWeaponModel(getstatf(STAT_ACTIVEWEAPON), FALSE) && vmodel.model != "")
 			    HUD_AmmoString();
+
+			if (nameprint_time > time)
+				HUD_CharacterName(width, height);
+
+			if (bettyprompt_time > time)
+				HUD_BouncingBetty(width, height);
 		
 			if (HUD_Change_time > time)
 			{
@@ -1599,6 +1732,9 @@ void(float width, float height) HUD_Draw =
 			if (cvar("scr_serverstopwatch")) {
 				HUD_StopWatch(width, height);
 			}
+			if (cvar("scr_serverstopwatch") >= 2) {
+				HUD_RoundStopWatch(width, height);
+			}
 		} else {
 			HUD_Waypoint(width, height);
 		}
@@ -1608,7 +1744,7 @@ void(float width, float height) HUD_Draw =
 	if (broadcast_time > time)
 		HUD_Broadcast();
 	
-	if (getstatf(STAT_HEALTH) <= 10 && getstatf(STAT_SPECTATING) && !find(world, classname, "ai_zombie"))
+	if (game_over)
 		HUD_Endgame();
 		
 	if (score_show)

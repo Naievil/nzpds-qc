@@ -25,6 +25,8 @@
 
 */
 
+void(entity person) W_ShowCrosshair;
+
 void() ContinueRun =
 {
 	float startframe;
@@ -91,6 +93,8 @@ void () W2_Frame_Update =
 	}
 	else
 	{
+		if (self.callfuncat2 != self.weapon2frame && self.reload_delay <= time)
+			W_ShowCrosshair(self);
 		self.weapon2frame = self.weapon2frame_end = self.weapon2frame = GetFrame(self.weapon,BASE_FRAME);
 		self.new_anim2_stop = FALSE;
 		self.weapon2_anim_type = 0;
@@ -110,8 +114,8 @@ void () W_Frame_Update =
 	if (self.anim_weapon_time > time)
 		return; //don't call every frame, if it is the animations will play too fast
 
-	if (IsDualWeapon(self.weapon))
-		W2_Frame_Update();
+	//if (IsDualWeapon(self.weapon))
+	//	W2_Frame_Update();
 	
 	self.anim_weapon_time = time + self.weapon_animduration;
 
@@ -149,10 +153,16 @@ void () W_Frame_Update =
 			}
 		}
 		PlayWeaponSound(self.weapon, self.weapon_anim_type, FALSE, self.weaponframe);
+
+		// FIXME: We need a way to play sounds at specific frames for any viewmodel, not just weapons
+		if (self.weaponmodel == "models/weapons/grenade/v_betty.mdl" && self.weaponframe == 12)
+			sound (self, CHAN_WEAPON, "sounds/weapons/grenade/prime.wav", 1, ATTN_NORM);
 		return;
 	}
 	else
 	{
+		if (self.callfuncat != self.weaponframe && self.reload_delay2 <= time)
+			W_ShowCrosshair(self);
 		self.weaponframe_end = self.weaponframe = GetFrame(self.weapon,BASE_FRAME);
 		self.new_anim_stop = FALSE;
 		self.weapon_anim_type = 0;
@@ -164,8 +174,8 @@ void () W_Frame_Update =
 			temp(S_RIGHT);
 	}
 
-	if (!IsDualWeapon(self.weapon))
-		W2_Frame_Update();
+	//if (!IsDualWeapon(self.weapon))
+	//	W2_Frame_Update();
 };
 
 float(string path) model_should_hide_weapon2 =
@@ -176,6 +186,7 @@ float(string path) model_should_hide_weapon2 =
 		case "models/weapons/bk/v_bk.mdl":
 		case "models/weapons/knife/v_bowie.mdl":
 		case "models/weapons/knife/v_knife.mdl":
+		case "models/weapons/morphine/v_morphine.mdl":
 			return true;
 	}
 

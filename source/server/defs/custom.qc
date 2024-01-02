@@ -26,7 +26,7 @@
 */
 
 #ifndef STANDARD
-#pragma target FTE
+#pragma target fte_5768
 #endif // STANDARD
 
 #define true 				1
@@ -36,6 +36,11 @@
 
 #define STR_NOTENOUGHPOINTS	"Not Enough Points\n"	// To help aid consistency with these..
 
+#define SPAWN_1_CLASS       "info_player_1_spawn"
+#define SPAWN_2_CLASS       "info_player_2_spawn"
+#define SPAWN_3_CLASS       "info_player_3_spawn"
+#define SPAWN_4_CLASS       "info_player_4_spawn"
+
 float cheats_have_been_activated;
 
 // Quake assumes these are defined.
@@ -43,8 +48,6 @@ string 	string_null;
 .string killtarget;
 entity 	activator;
 float 	framecount;
-float 	deathmatch;
-float 	coop;
 
 float music_override;
 
@@ -70,12 +73,12 @@ float 	ach_tracker_spin;
 float global_trace_damage_multiplier;
 
 .float ads_release;
+.float has_doubletap_damage_buff;
 
 .vector oldvelocity;
 .float lastsound_time;
 .float isspec;
 string mappath;
-.float playernum;
 .float ads_toggle;
 float player_count;
 entity pl1;
@@ -130,8 +133,6 @@ void(entity person, float expamt , float doublepoint) addmoney;
 float sprint_max_time = 4.0;
 .float sprinting;
 .float weaponskin;
-.float secondaryweaponskin;
-.float thirdweaponskin;
 .float stamina;
 .float sprint_timer;
 .float sprint_duration;
@@ -139,16 +140,21 @@ float sprint_max_time = 4.0;
 .float sprint_start_time;
 .float sprint_stop_time;
 .float sprint_rest_time;
+.float tp_anim_time;
+.float tp_anim_type;
 void() W_SprintStop;
 .float into_sprint;
 .float dive;
 .float dive_delay;
 .vector movement;
 
+.float hunt_count; // How many Hellhounds are hunting a client
+
 //Weaponsystem defines
 void SwitchWeapon(float to);
 void GetUp();
 void Weapon_Logic();
+void (float shotcount, float sprd, float Damage, float side) FireTrace;
 .float downed;
 .float fire_delay;
 .float fire_delay2;
@@ -166,26 +172,33 @@ void Weapon_Logic();
 .float currentmagbk;
 .float currentmagbk2;
 .float currentammobk;
-.float secondaryammo;
-.float thirdammo;
 .float semi;
 .float semi2;
 .float semiuse;
 .float semiswitch;		// Weapon Swap Toggle
 .float seminade;		// Grenade Toggle
 .float semireload;
-.float secondarymag;
-.float secondarymag2;
-.float secondaryweapon;
-.float thirdmag;
-.float thirdmag2;
-.float thirdweapon;
 .float NeedLoad;
 .string weapon2model;
 .float weapon2frame;
 .float reloadinterupted;
 .float hitcount;
-.float weaponnum;	// 0 for weapon one, 1 for second weapon...we invert value for easy comparison, a third gun would need to be hardwired
+
+#define MAX_PLAYER_WEAPONS 		3
+#define MULEKICK_WEAPON_SLOT	3
+
+var struct guninventory_struct
+{
+	float 	weapon_id;
+	float 	weapon_magazine;
+	float 	weapon_magazine_left;
+	float 	weapon_reserve;
+	float 	weapon_skin;
+	float 	is_mulekick_weapon;
+};
+
+.guninventory_struct weapons[MAX_PLAYER_WEAPONS];
+.float weapon_count;
 
 //Reviving
 .float invoke_revive;
@@ -235,25 +248,18 @@ void Set_W_Frame (float startframe, float endframe, float duration, float funcca
 void() SUB_Null = {};
 void() SUB_Null2 = {};
 
-#define 	VEC_HULL_MIN  		'-16 -16 -32'
-#define 	VEC_HULL_MAX  		'16 16 40'
+#define 	VEC_HULL_MIN  		'-16 -16 -36'
+#define 	VEC_HULL_MAX  		'16 16 36'
 #define 	VEC_HULL2_MIN   	'-32 -32 -24'
 #define 	VEC_HULL2_MAX  		'32 32 64'
 
 #define     VEC_VIEW_OFS  '0 0 32'
 
-// FIXME: Limits Quakespasm to 12 zombies lol
-#ifdef FTE
-
-#define MAX_ZOMB 			24
-
-#else
-
-#define MAX_ZOMB 			12
-
-#endif // FTE 
-
+.string name;
 vector	trace_plane_normal;
+
+.float dmg;
+.float fire_timeout;
 
 //
 // AI definitions
@@ -265,9 +271,15 @@ void Z_ElectroShock();
 .float electro_targeted; 							// Marks Zombie as waiting to die via Electro-Shock
 .float death_timer; 								// A timer that will kill a Zombie when it expires.
 .float death_timer_activated; 						// To prevent Zombies just dying because of this..
+.float is_attacking; 								// Returns true if Zombie is in the middle of an attack.
+
+#ifndef FTE
+
+entity lastzombie;									// Used by non-FTE to update zombie AI one ent at a time.
+
+#endif // FTE
 
 .string aistatus;
-entity lastzombie;
 float zombie_spawn_delay; // time before spawning, in seconds.
 float zombie_spawn_timer; // the actual timer for spawn delay
 //Other AI definitions
@@ -275,11 +287,23 @@ float zombie_spawn_timer; // the actual timer for spawn delay
 .vector idlebox;
 .vector hop_spot;//used for windows (zombies hop to these)
 .vector goalorigin;
-.float teslacount;
+
+.float teslacount; // TODO - Remove this
+
+.float tesla_n_kills; // Player - Number of kills remaining for the current tesla shot
+.float tesla_next_arc_time; // Zombie - Time at which zombie should try arcing
+.float tesla_arc_num; // Zombie - current arc number
+.entity tesla_arc_parent; // Zombie - Track the entity that we arced from
+.entity tesla_arc_owner; // Zombie - Player ent that fired the tesla
+void(vector pos) tesla_spark;
+
+
+
 .float iszomb;
 .float onfire;
 .entity firer;
 float crawler_num;
+float zombie_spawn_points;
 //==== Reference Vars ====
 #define 	WWINDOW		1
 #define 	WBOX1 		2
@@ -322,6 +346,7 @@ entity lastspawn;									// last spawn point used by spawning code
 .entity goaldummy; 									// Used to store the origin of the zombies target
 .float goalway; 									// Used to store the origin of the zombies target
 .float walktype;									// decides animations and moving speeds for zombies
+.float spawn_id;									// assigned to spawn point ents, for grabbing one at random.
 .void() th_walk;
 //.void() th_run;
 .void() th_die;
@@ -368,10 +393,13 @@ float() spawn_a_zombieA;
 float gotdog;
 float dogRound;
 float dogWave;
+float dog_round_count;
 float z_health;
 .float bleedingtime;
 .float time_to_die;
 
+.float respawn_timer;
+.float respawn_iterator;
 
 float crandom();
 
@@ -392,8 +420,12 @@ float isPowerOn;
 .float isBuying; // naievil -- used for checking if a perk is being consumed, limits glitching
 .float perks;
 .float perk_delay;
-.float revivesoda;
-.float collected;
+
+.float perk_purchase_count;
+.float perk_purchase_limit_solo;
+.float perk_purchase_limit_coop;
+.float perk_requires_power_solo;
+.float perk_requires_power_coop;
 
 // Mystery Box
 #define MAX_BOX_WEAPONS 		27
@@ -405,9 +437,10 @@ float isPowerOn;
 
 var struct mbox_struct
 {
-	float weapon_id; 	// ID for the relevant weapon.
-	float allowed;		// 1 for allowed, 0 for denied.
-	float rarity;		// 0-100 (float) percent change for obtaining. -1 for normal.
+	float weapon_id; 			// ID for the relevant weapon.
+	float allowed;				// 1 for allowed, 0 for denied.
+	float rarity;				// 0-100 (float) percent change for obtaining. -1 for normal.
+	float already_obtained;		// true if only one allowed and a client already holds it.
 } mystery_box_weapons[MAX_BOX_WEAPONS] = {};
 
 float 	mystery_box_count;
@@ -437,6 +470,7 @@ float total_windows_down;
 float total_powerup_points;
 float powerup_score_threshold;
 float powerup_activate;
+float carp_powerup_active;
 float nuke_powerup_active;
 float nuke_powerups_activated;
 float nuke_powerup_spawndelay;
@@ -450,7 +484,6 @@ float Remaining_Zombies;
 float Delay_Time;
 float spawn_time;
 float round_changetime;
-float game_over;
 float blink_return;
 float delay_at_round;
 float spawn_delay;

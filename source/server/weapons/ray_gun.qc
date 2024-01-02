@@ -137,6 +137,7 @@ void() W_FireRay =
 	porter.movetype = MOVETYPE_FLY;
 	porter.weapon = self.weapon;
 	porter.solid = SOLID_BBOX;
+	porter.classname = "projectile_raybeam";
 
     // Start initial velocity projection.
 	makevectors(self.v_angle);
@@ -188,6 +189,17 @@ void() W_FireRay =
     // final setup!
 	porter.origin = self.origin + self.view_ofs;
 	porter.origin += v_forward * 0;
+
+	// Start at the barrel offset if not ADS
+	if (self.zoom == 0) {
+		makevectors(self.v_angle);
+		// Y, Z, X
+		vector ads_pos = GetWeaponFlash_Offset(self.weapon);
+		porter.origin += v_right * (ads_pos.x/1000);
+    	porter.origin += v_up * (ads_pos.y/1000);
+    	porter.origin += v_forward * (ads_pos.z/1000);
+	}
+
 	setorigin(porter, porter.origin);
 
 	self.animend = ReturnWeaponModel;
